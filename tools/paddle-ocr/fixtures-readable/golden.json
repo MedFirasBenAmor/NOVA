@@ -1,0 +1,202 @@
+[
+  {
+    "fixture": "license_01_clean.png",
+    "category": "clean",
+    "collectionMode": "FULL_DOCUMENT",
+    "expected": {
+      "driver.first_name": "ALEX",
+      "driver.last_name": "MARTIN",
+      "driver.date_of_birth": "1998-04-17"
+    }
+  },
+  {
+    "fixture": "license_02_targeted.png",
+    "category": "targeted",
+    "collectionMode": "TARGETED_CAPTURE",
+    "expected": {
+      "driver.first_name": "JAMIE",
+      "driver.last_name": "EXAMPLE",
+      "driver.date_of_birth": "1987-11-03"
+    }
+  },
+  {
+    "fixture": "license_03_rotation.png",
+    "category": "rotation",
+    "collectionMode": "FULL_DOCUMENT",
+    "expected": {
+      "driver.first_name": "TAYLOR",
+      "driver.last_name": "SAMPLE",
+      "driver.date_of_birth": "2001-02-28"
+    }
+  },
+  {
+    "fixture": "license_04_blur.png",
+    "category": "blur",
+    "collectionMode": "FULL_DOCUMENT",
+    "expected": {
+      "driver.first_name": "ALEX",
+      "driver.last_name": "MARTIN",
+      "driver.date_of_birth": "1998-04-17"
+    }
+  },
+  {
+    "fixture": "license_05_reduced_contrast.png",
+    "category": "reduced_contrast",
+    "collectionMode": "FULL_DOCUMENT",
+    "expected": {
+      "driver.first_name": "JAMIE",
+      "driver.last_name": "EXAMPLE",
+      "driver.date_of_birth": "1987-11-03"
+    }
+  },
+  {
+    "fixture": "license_06_clean.png",
+    "category": "clean",
+    "collectionMode": "FULL_DOCUMENT",
+    "expected": {
+      "driver.first_name": "TAYLOR",
+      "driver.last_name": "SAMPLE",
+      "driver.date_of_birth": "2001-02-28"
+    }
+  },
+  {
+    "fixture": "license_07_targeted.png",
+    "category": "targeted",
+    "collectionMode": "TARGETED_CAPTURE",
+    "expected": {
+      "driver.first_name": "ALEX",
+      "driver.last_name": "MARTIN",
+      "driver.date_of_birth": "1998-04-17"
+    }
+  },
+  {
+    "fixture": "license_08_rotation.png",
+    "category": "rotation",
+    "collectionMode": "FULL_DOCUMENT",
+    "expected": {
+      "driver.first_name": "JAMIE",
+      "driver.last_name": "EXAMPLE",
+      "driver.date_of_birth": "1987-11-03"
+    }
+  },
+  {
+    "fixture": "license_09_blur.png",
+    "category": "blur",
+    "collectionMode": "FULL_DOCUMENT",
+    "expected": {
+      "driver.first_name": "TAYLOR",
+      "driver.last_name": "SAMPLE",
+      "driver.date_of_birth": "2001-02-28"
+    }
+  },
+  {
+    "fixture": "license_10_reduced_contrast.png",
+    "category": "reduced_contrast",
+    "collectionMode": "FULL_DOCUMENT",
+    "expected": {
+      "driver.first_name": "ALEX",
+      "driver.last_name": "MARTIN",
+      "driver.date_of_birth": "1998-04-17"
+    }
+  },
+  {
+    "fixture": "license_11_clean.png",
+    "category": "clean",
+    "collectionMode": "FULL_DOCUMENT",
+    "expected": {
+      "driver.first_name": "JAMIE",
+      "driver.last_name": "EXAMPLE",
+      "driver.date_of_birth": "1987-11-03"
+    }
+  },
+  {
+    "fixture": "license_12_targeted.png",
+    "category": "targeted",
+    "collectionMode": "TARGETED_CAPTURE",
+    "expected": {
+      "driver.first_name": "TAYLOR",
+      "driver.last_name": "SAMPLE",
+      "driver.date_of_birth": "2001-02-28"
+    }
+  },
+  {
+    "fixture": "license_13_rotation.png",
+    "category": "rotation",
+    "collectionMode": "FULL_DOCUMENT",
+    "expected": {
+      "driver.first_name": "ALEX",
+      "driver.last_name": "MARTIN",
+      "driver.date_of_birth": "1998-04-17"
+    }
+  },
+  {
+    "fixture": "license_14_blur.png",
+    "category": "blur",
+    "collectionMode": "FULL_DOCUMENT",
+    "expected": {
+      "driver.first_name": "JAMIE",
+      "driver.last_name": "EXAMPLE",
+      "driver.date_of_birth": "1987-11-03"
+    }
+  },
+  {
+    "fixture": "license_15_reduced_contrast.png",
+    "category": "reduced_contrast",
+    "collectionMode": "FULL_DOCUMENT",
+    "expected": {
+      "driver.first_name": "TAYLOR",
+      "driver.last_name": "SAMPLE",
+      "driver.date_of_birth": "2001-02-28"
+    }
+  },
+  {
+    "fixture": "license_16_clean.png",
+    "category": "clean",
+    "collectionMode": "FULL_DOCUMENT",
+    "expected": {
+      "driver.first_name": "ALEX",
+      "driver.last_name": "MARTIN",
+      "driver.date_of_birth": "1998-04-17"
+    }
+  },
+  {
+    "fixture": "license_17_targeted.png",
+    "category": "targeted",
+    "collectionMode": "TARGETED_CAPTURE",
+    "expected": {
+      "driver.first_name": "JAMIE",
+      "driver.last_name": "EXAMPLE",
+      "driver.date_of_birth": "1987-11-03"
+    }
+  },
+  {
+    "fixture": "license_18_rotation.png",
+    "category": "rotation",
+    "collectionMode": "FULL_DOCUMENT",
+    "expected": {
+      "driver.first_name": "TAYLOR",
+      "driver.last_name": "SAMPLE",
+      "driver.date_of_birth": "2001-02-28"
+    }
+  },
+  {
+    "fixture": "license_19_blur.png",
+    "category": "blur",
+    "collectionMode": "FULL_DOCUMENT",
+    "expected": {
+      "driver.first_name": "ALEX",
+      "driver.last_name": "MARTIN",
+      "driver.date_of_birth": "1998-04-17"
+    }
+  },
+  {
+    "fixture": "license_20_reduced_contrast.png",
+    "category": "reduced_contrast",
+    "collectionMode": "FULL_DOCUMENT",
+    "expected": {
+      "driver.first_name": "JAMIE",
+      "driver.last_name": "EXAMPLE",
+      "driver.date_of_birth": "1987-11-03"
+    }
+  }
+]

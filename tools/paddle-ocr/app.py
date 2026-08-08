@@ -5,31 +5,48 @@ Business extraction stays in NestJS. This process returns OCR blocks only.
 import io
 import os
 import time
-from functools import lru_cache
+import threading
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from PIL import Image
 import pypdfium2 as pdfium
+import numpy as np
+
+os.environ.setdefault("FLAGS_use_mkldnn", "0")
 
 MAX_BYTES = int(os.getenv("OCR_MAX_BYTES", str(10 * 1024 * 1024)))
 app = FastAPI(docs_url=None, redoc_url=None)
+_model_lock = threading.Lock()
+_model = None
 
 
 @app.get("/health")
 def health():
     try:
         _ocr()
-        return {"status": "ok", "provider": "PADDLE_OCR"}
-    except Exception:
-        return {"status": "unavailable", "provider": "PADDLE_OCR"}
+        return {"status": "ok", "provider": "PADDLE_OCR", "ready": True}
+    except Exception as exc:
+        return {"status": "unavailable", "provider": "PADDLE_OCR", "ready": False, "error": type(exc).__name__}
 
 
-@lru_cache(maxsize=1)
 def _ocr():
+    global _model
+    if _model is not None:
+        return _model
     from paddleocr import PaddleOCR
-
-    return PaddleOCR(lang="en", use_doc_orientation_classify=False,
-                     use_doc_unwarping=False, use_textline_orientation=False)
+    with _model_lock:
+        if _model is None:
+            _model = PaddleOCR(
+                lang="en",
+                text_detection_model_name="PP-OCRv5_mobile_det",
+                text_recognition_model_name="en_PP-OCRv5_mobile_rec",
+                use_doc_orientation_classify=False,
+                use_doc_unwarping=False,
+                use_textline_orientation=False,
+                device="cpu",
+                enable_mkldnn=False,
+            )
+    return _model
 
 
 @app.post("/ocr")
@@ -48,9 +65,14 @@ async def ocr(file: UploadFile = File(...)):
             image = pdf[0].render(scale=2).to_pil().convert("RGB")
         else:
             image = Image.open(io.BytesIO(data)).convert("RGB")
-        result = _ocr().predict(image)
+        result = _ocr().predict(input=np.array(image))
         blocks = []
         for page in result:
+            if hasattr(page, "json"):
+                page = page.json
+            if isinstance(page, str):
+                page = __import__("json").loads(page)
+            page = page.get("res", page)
             texts = page.get("rec_texts", [])
             scores = page.get("rec_scores", [])
             for text, confidence in zip(texts, scores):
@@ -61,6 +83,9 @@ async def ocr(file: UploadFile = File(...)):
     except HTTPException:
         raise
     except Exception as exc:
+        if os.getenv("OCR_DEBUG") == "1":
+            import traceback
+            traceback.print_exc()
         raise HTTPException(422, "OCR_UNREADABLE") from exc
 
 

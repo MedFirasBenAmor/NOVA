@@ -37,7 +37,11 @@ export class PaddleOcrProvider implements OcrProvider {
       throw new ServiceUnavailableException('OCR_PROVIDER_UNAVAILABLE');
     }
     if (!response.ok)
-      throw new ServiceUnavailableException('OCR_PROVIDER_UNAVAILABLE');
+      throw new ServiceUnavailableException(
+        response.status === 408 || response.status === 504
+          ? 'OCR_TIMEOUT'
+          : 'OCR_PROVIDER_UNAVAILABLE',
+      );
     const result = (await response.json()) as OcrResult & {
       blocks?: OcrResult['textBlocks'];
     };

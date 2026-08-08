@@ -23,6 +23,32 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+  paddle-ocr:
+    build:
+      context: ./tools/paddle-ocr
+    ports:
+      - '127.0.0.1:8001:8001'
+    environment:
+      OCR_MAX_BYTES: 10485760
+      OCR_DEBUG: 1
+      FLAGS_use_mkldnn: '0'
+      PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK: 'True'
+    read_only: true
+    tmpfs:
+      - /tmp:size=512m
+    volumes:
+      - nova_paddle_cache:/home/ocr/.paddlex
+    mem_limit: 4g
+    cpus: 2
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ['CMD', 'python', '-c', "import json,urllib.request; x=json.load(urllib.request.urlopen('http://127.0.0.1:8001/health')); raise SystemExit(0 if x.get('ready') else 1)"]
+      interval: 30s
+      timeout: 15s
+      start_period: 180s
+      retries: 3
 
 volumes:
   nova_postgres_data:
+  nova_paddle_cache:
