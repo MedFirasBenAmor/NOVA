@@ -1,0 +1,18 @@
+{
+  "name": "nova",
+  "private": true,
+  "packageManager": "pnpm@11.15.1",
+  "scripts": {
+    "dev": "corepack pnpm --parallel --filter @nova/web --filter @nova/api dev",
+    "build": "corepack pnpm --filter @nova/web build && corepack pnpm --filter @nova/api build",
+    "lint": "corepack pnpm --recursive --if-present lint",
+    "test": "corepack pnpm --recursive --if-present test",
+    "format": "prettier --write .",
+    "db:generate": "corepack pnpm --filter @nova/api prisma:generate",
+    "db:migrate": "corepack pnpm --filter @nova/api prisma:migrate",
+    "db:seed": "corepack pnpm --filter @nova/api prisma:seed"
+  },
+  "devDependencies": {
+    "prettier": "^3.6.2"
+  }
+}

@@ -1,0 +1,11 @@
+node_modules
+.next
+dist
+coverage
+.env
+*.log
+*.tsbuildinfo
+.DS_Store
+apps/api/prisma/dev.db
+var/documents/
+apps/api/var/documents/

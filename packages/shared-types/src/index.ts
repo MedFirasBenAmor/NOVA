@@ -1,0 +1,159 @@
+export type HealthResponse = { status: 'ok' };
+
+export type DatapointProduct = 'COMMON' | 'AUTO' | 'HOME';
+export type MissingReason = 'REQUIRED' | 'CONDITIONAL';
+
+export type CompletenessItem = {
+  key: string;
+  entityType: string;
+  entityId?: string;
+};
+
+export type MissingDatapoint = CompletenessItem & {
+  reason: MissingReason;
+  triggeredBy?: string;
+};
+
+export type CompletenessResponse = {
+  product: DatapointProduct;
+  completeness: number;
+  known: CompletenessItem[];
+  missing: MissingDatapoint[];
+  conditionalRequired: Array<CompletenessItem & { triggeredBy: string }>;
+};
+
+export type IntelligenceIntentType =
+  | 'INSURANCE_SHOPPING'
+  | 'NEW_ACQUISITION'
+  | 'RENEWAL'
+  | 'COMMERCIAL_VEHICLE_USE'
+  | 'CLAIM_MENTIONED'
+  | 'DOCUMENT_REFUSAL'
+  | 'GENERAL_INQUIRY';
+
+export type IntelligenceProductType = 'COMMON' | 'AUTO' | 'HOME';
+
+export type IntelligenceEventType =
+  | 'VEHICLE_PURCHASE'
+  | 'COMMERCIAL_USE'
+  | 'RENEWAL_MENTIONED'
+  | 'CLAIM_MENTIONED'
+  | 'DOCUMENT_UPLOAD_REFUSED';
+
+export type IntelligenceExtractionMethod =
+  'EXTRACTED' | 'ENRICHED' | 'INFERRED';
+export type IntelligenceEntityType =
+  'CUSTOMER' | 'VEHICLE' | 'DRIVER' | 'CLAIM' | 'REQUEST';
+
+export type IntelligenceCatalogItem = {
+  key: string;
+  label: string;
+  dataType: string;
+  entityType: IntelligenceEntityType;
+  allowedValues?: unknown[];
+};
+
+export type IntelligenceKnownDatapoint = {
+  key: string;
+  value: unknown;
+  entityType: IntelligenceEntityType;
+  entityId?: string;
+};
+
+export type IntelligenceInput = {
+  message: string;
+  currentProduct?: IntelligenceProductType;
+  entityContext?: {
+    vehicleId?: string;
+    driverId?: string;
+    claimId?: string;
+  };
+  knownDatapoints: IntelligenceKnownDatapoint[];
+  catalog: IntelligenceCatalogItem[];
+};
+
+export type IntelligenceCandidateDatapoint = {
+  key: string;
+  value: unknown;
+  entityType: IntelligenceEntityType;
+  entityId?: string;
+  method: IntelligenceExtractionMethod;
+  confidence: number;
+  evidence?: string;
+};
+
+export type IntelligenceConfidence = { confidence: number };
+
+export type IntelligenceResult = {
+  intent: IntelligenceConfidence & { type: IntelligenceIntentType };
+  product: IntelligenceConfidence & { type: IntelligenceProductType };
+  events: Array<IntelligenceConfidence & { type: IntelligenceEventType }>;
+  candidateDatapoints: IntelligenceCandidateDatapoint[];
+};
+
+export type NextAction =
+  | {
+      type: 'SUGGEST_FULL_DOCUMENT';
+      actionId: string;
+      documentType: string;
+      entityType: IntelligenceEntityType;
+      entityId?: string;
+      coveredMissingDatapoints: string[];
+      questionsPotentiallyAvoided: number;
+      required: boolean;
+      accepted?: boolean;
+    }
+  | {
+      type: 'SUGGEST_TARGETED_CAPTURE';
+      actionId: string;
+      documentType: string;
+      entityType: IntelligenceEntityType;
+      entityId?: string;
+      coveredMissingDatapoints: string[];
+      questionsPotentiallyAvoided: number;
+      required: boolean;
+      accepted?: boolean;
+    }
+  | {
+      type: 'ASK_DATAPOINT';
+      actionId: string;
+      datapoint: {
+        key: string;
+        entityType: IntelligenceEntityType;
+        entityId?: string;
+        label?: string;
+        description?: string;
+      };
+      ui: {
+        inputType: 'TEXT' | 'NUMBER' | 'DATE' | 'SINGLE_CHOICE' | 'YES_NO';
+        options?: unknown[];
+      };
+    }
+  | {
+      type: 'ASK_GROUPED_DATAPOINTS';
+      actionId: string;
+      datapoints: Array<{
+        key: string;
+        entityType: IntelligenceEntityType;
+        entityId?: string;
+        label?: string;
+      }>;
+    }
+  | {
+      type: 'CONFIRM_DATAPOINT';
+      actionId: string;
+      datapoint: {
+        key: string;
+        entityType: IntelligenceEntityType;
+        entityId?: string;
+        value: unknown;
+        label?: string;
+      };
+    }
+  | {
+      type: 'WAIT_FOR_PROCESSING';
+      documentId: string;
+      documentType: string;
+      status: 'UPLOADED' | 'PROCESSING';
+    }
+  | { type: 'COMPLETE'; actionId: string };

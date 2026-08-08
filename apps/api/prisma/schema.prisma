@@ -1,0 +1,344 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          String       @id @default(uuid()) @db.Uuid
+  email       String       @unique
+  displayName String?
+  auditEvents AuditEvent[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+model Customer {
+  id            String          @id @default(uuid()) @db.Uuid
+  email         String?
+  phone         String?
+  leads         Lead[]
+  conversations Conversation[]
+  folder        CustomerFolder?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+}
+
+model Lead {
+  id                 String              @id @default(uuid()) @db.Uuid
+  customerId         String?             @db.Uuid
+  customer           Customer?           @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  folder             CustomerFolder?
+  conversations      Conversation[]
+  source             String?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  collectionAttempts CollectionAttempt[]
+  documents          Document[]
+  anonymousSessions  AnonymousSession[]
+}
+
+model AnonymousSession {
+  id         String    @id @default(uuid()) @db.Uuid
+  leadId     String    @db.Uuid
+  lead       Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  tokenHash  String    @unique
+  expiresAt  DateTime
+  createdAt  DateTime  @default(now())
+  lastSeenAt DateTime  @default(now())
+  revokedAt  DateTime?
+
+  @@index([leadId])
+  @@index([expiresAt])
+}
+
+model Conversation {
+  id         String                @id @default(uuid()) @db.Uuid
+  leadId     String?               @db.Uuid
+  lead       Lead?                 @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  customerId String?               @db.Uuid
+  customer   Customer?             @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  createdAt  DateTime              @default(now())
+  updatedAt  DateTime              @updatedAt
+  messages   ConversationMessage[]
+}
+
+enum ConversationMessageRole {
+  CUSTOMER
+  NOVA
+  SYSTEM
+}
+
+model ConversationMessage {
+  id             String                  @id @default(uuid()) @db.Uuid
+  conversationId String                  @db.Uuid
+  conversation   Conversation            @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           ConversationMessageRole
+  content        String
+  metadata       Json?
+  createdAt      DateTime                @default(now())
+
+  @@index([conversationId, createdAt])
+}
+
+enum CollectionActionType {
+  SUGGEST_FULL_DOCUMENT
+  SUGGEST_TARGETED_CAPTURE
+  ASK_DATAPOINT
+  ASK_GROUPED_DATAPOINTS
+  CONFIRM_DATAPOINT
+  COMPLETE
+}
+
+enum CollectionAttemptStatus {
+  PROPOSED
+  ACCEPTED
+  DECLINED
+  SKIPPED
+  COMPLETED
+  FAILED
+}
+
+model CollectionAttempt {
+  id           String                  @id @default(uuid()) @db.Uuid
+  leadId       String                  @db.Uuid
+  lead         Lead                    @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  entityType   EntityType?
+  entityId     String?                 @db.Uuid
+  actionType   CollectionActionType
+  capabilityId String?
+  documentType String?
+  product      Product
+  status       CollectionAttemptStatus @default(PROPOSED)
+  metadata     Json?
+  createdAt    DateTime                @default(now())
+  resolvedAt   DateTime?
+  documents    Document[]
+
+  @@index([leadId, createdAt])
+}
+
+model CustomerFolder {
+  id              String           @id @default(uuid()) @db.Uuid
+  leadId          String?          @unique @db.Uuid
+  lead            Lead?            @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  customerId      String?          @unique @db.Uuid
+  customer        Customer?        @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  datapointValues DatapointValue[]
+  documents       Document[]
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+}
+
+enum DocumentType {
+  DRIVER_LICENSE
+  CURRENT_AUTO_POLICY
+  VEHICLE_REGISTRATION
+  OTHER
+}
+
+enum DocumentCollectionMode {
+  FULL_DOCUMENT
+  TARGETED_CAPTURE
+}
+
+enum DocumentStorageProvider {
+  LOCAL
+}
+
+enum DocumentStatus {
+  PENDING_UPLOAD
+  UPLOADED
+  PROCESSING
+  PROCESSED
+  FAILED
+  REJECTED
+}
+
+model Document {
+  id                   String                  @id @default(uuid()) @db.Uuid
+  leadId               String                  @db.Uuid
+  lead                 Lead                    @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  customerFolderId     String                  @db.Uuid
+  customerFolder       CustomerFolder          @relation(fields: [customerFolderId], references: [id], onDelete: Cascade)
+  collectionAttemptId  String?                 @db.Uuid
+  collectionAttempt    CollectionAttempt?      @relation(fields: [collectionAttemptId], references: [id], onDelete: SetNull)
+  entityType           EntityType?
+  entityId             String?                 @db.Uuid
+  documentType         DocumentType
+  collectionMode       DocumentCollectionMode
+  originalFilename     String
+  mimeType             String
+  sizeBytes            Int
+  storageProvider      DocumentStorageProvider
+  storageKey           String                  @unique
+  status               DocumentStatus          @default(PENDING_UPLOAD)
+  failureReason        String?
+  createdAt            DateTime                @default(now())
+  updatedAt            DateTime                @updatedAt
+  uploadedAt           DateTime?
+  processingStartedAt  DateTime?
+  processedAt          DateTime?
+  processingProvider   String?
+  candidatesDetected   Int                     @default(0)
+  candidatesAccepted   Int                     @default(0)
+  candidatesRejected   Int                     @default(0)
+  processingDurationMs Int?
+
+  @@index([leadId, createdAt])
+  @@index([collectionAttemptId])
+}
+
+enum Product {
+  COMMON
+  AUTO
+  HOME
+}
+
+enum DataType {
+  STRING
+  NUMBER
+  BOOLEAN
+  DATE
+  ENUM
+  OBJECT
+}
+
+enum RequirementType {
+  REQUIRED
+  OPTIONAL
+  CONDITIONAL
+}
+
+enum ImpactLevel {
+  NONE
+  LOW
+  MEDIUM
+  HIGH
+  BLOCKING
+}
+
+enum SourceType {
+  CUSTOMER_CHAT
+  CUSTOMER_FORM
+  CUSTOMER_CONFIRMATION
+  EXISTING_NOVA
+  FULL_DOCUMENT
+  TARGETED_DOCUMENT_CAPTURE
+  EXTERNAL_API
+  BROKER
+  DERIVED
+  ENRICHED
+}
+
+enum CollectionMethod {
+  REUSED
+  EXTRACTED
+  TARGETED_CAPTURE
+  API_FETCHED
+  DERIVED
+  ENRICHED
+  CONFIRMED
+  MANUAL_QUESTION
+  MANUAL_ENTRY
+  BROKER_ENTERED
+}
+
+enum DatapointStatus {
+  MISSING
+  CANDIDATE
+  EXTRACTED
+  INFERRED
+  ENRICHED
+  CONFIRMED
+  CONFLICTING
+  VALIDATED
+  REJECTED
+  EXPIRED
+  NOT_APPLICABLE
+}
+
+enum EntityType {
+  CUSTOMER
+  VEHICLE
+  DRIVER
+  CLAIM
+  REQUEST
+}
+
+model DatapointDefinition {
+  id                         String             @id @default(uuid()) @db.Uuid
+  key                        String
+  label                      String
+  description                String
+  product                    Product
+  category                   String
+  entityType                 EntityType
+  dataType                   DataType
+  requirementType            RequirementType
+  requiredWhen               Json?
+  possibleSources            SourceType[]
+  preferredCollectionMethods CollectionMethod[]
+  validationRules            Json?
+  riskImpact                 ImpactLevel
+  eligibilityImpact          ImpactLevel
+  active                     Boolean            @default(true)
+  version                    Int                @default(1)
+  values                     DatapointValue[]
+  createdAt                  DateTime           @default(now())
+  updatedAt                  DateTime           @updatedAt
+
+  @@unique([key, version])
+  @@index([product, active])
+}
+
+model DatapointValue {
+  id               String              @id @default(uuid()) @db.Uuid
+  customerFolderId String              @db.Uuid
+  customerFolder   CustomerFolder      @relation(fields: [customerFolderId], references: [id], onDelete: Cascade)
+  definitionId     String              @db.Uuid
+  definition       DatapointDefinition @relation(fields: [definitionId], references: [id], onDelete: Restrict)
+  entityType       EntityType
+  entityId         String?             @db.Uuid
+  scopeKey         String
+  value            Json?
+  status           DatapointStatus     @default(CANDIDATE)
+  confidence       Float?
+  collectedAt      DateTime            @default(now())
+  confirmedAt      DateTime?
+  validatedAt      DateTime?
+  sources          DatapointSource[]
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  @@unique([customerFolderId, definitionId, scopeKey])
+  @@index([customerFolderId, entityType, entityId])
+}
+
+model DatapointSource {
+  id                String           @id @default(uuid()) @db.Uuid
+  datapointValueId  String           @db.Uuid
+  datapointValue    DatapointValue   @relation(fields: [datapointValueId], references: [id], onDelete: Cascade)
+  sourceType        SourceType
+  collectionMethod  CollectionMethod
+  sourceReferenceId String?
+  observedValue     Json?
+  confidence        Float?
+  metadata          Json?
+  createdAt         DateTime         @default(now())
+
+  @@index([datapointValueId, createdAt])
+}
+
+model AuditEvent {
+  id         String   @id @default(uuid()) @db.Uuid
+  actorId    String?  @db.Uuid
+  actor      User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  action     String
+  entityType String
+  entityId   String?  @db.Uuid
+  createdAt  DateTime @default(now())
+}
