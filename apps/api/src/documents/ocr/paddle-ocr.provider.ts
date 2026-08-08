@@ -22,14 +22,30 @@ export class PaddleOcrProvider implements OcrProvider {
       new Blob([new Uint8Array(input.buffer)], { type: input.mimeType }),
       'document',
     );
-    const response = await fetch(url, { method: 'POST', body: form });
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method: 'POST',
+        body: form,
+        signal: AbortSignal.timeout(
+          this.config.get<number>('OCR_TIMEOUT_MS', 30_000),
+        ),
+      });
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'TimeoutError')
+        throw new ServiceUnavailableException('OCR_TIMEOUT');
+      throw new ServiceUnavailableException('OCR_PROVIDER_UNAVAILABLE');
+    }
     if (!response.ok)
-      throw new ServiceUnavailableException('PaddleOCR helper failed');
-    const result = (await response.json()) as OcrResult;
-    if (!Array.isArray(result.textBlocks))
+      throw new ServiceUnavailableException('OCR_PROVIDER_UNAVAILABLE');
+    const result = (await response.json()) as OcrResult & {
+      blocks?: OcrResult['textBlocks'];
+    };
+    const textBlocks = result.textBlocks ?? result.blocks;
+    if (!Array.isArray(textBlocks))
       throw new ServiceUnavailableException(
         'PaddleOCR returned an invalid result',
       );
-    return result;
+    return { ...result, textBlocks, provider: result.provider ?? 'PADDLE_OCR' };
   }
 }

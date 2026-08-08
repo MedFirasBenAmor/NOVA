@@ -56,6 +56,7 @@ export class DocumentProcessorService {
         mimeType: document.mimeType,
       });
       const candidates = this.extractor.extract(ocr);
+      if (!candidates.length) throw new Error('EXTRACTION_NO_FIELDS');
       let accepted = 0;
       let rejected = 0;
       for (const candidate of candidates) {
@@ -103,6 +104,7 @@ export class DocumentProcessorService {
           status: DocumentStatus.PROCESSED,
           processedAt: new Date(),
           processingDurationMs: Date.now() - started,
+          processingProvider: ocr.provider ?? this.ocr.name,
           candidatesDetected: candidates.length,
           candidatesAccepted: accepted,
           candidatesRejected: rejected,
@@ -114,10 +116,7 @@ export class DocumentProcessorService {
         where: { id: documentId },
         data: {
           status: DocumentStatus.FAILED,
-          failureReason:
-            error instanceof Error
-              ? error.message.slice(0, 100)
-              : 'PROCESSING_FAILED',
+          failureReason: this.failureCode(error),
           processedAt: new Date(),
           processingDurationMs: Date.now() - started,
         },
@@ -130,5 +129,21 @@ export class DocumentProcessorService {
     return this.prisma.auditEvent.create({
       data: { action, entityType: 'Document', entityId },
     });
+  }
+
+  private failureCode(error: unknown) {
+    if (!(error instanceof Error)) return 'PROCESSING_INTERNAL_ERROR';
+    const known = new Set([
+      'OCR_PROVIDER_UNAVAILABLE',
+      'OCR_TIMEOUT',
+      'OCR_UNREADABLE',
+      'UNSUPPORTED_DOCUMENT_CONTENT',
+      'EXTRACTION_NO_FIELDS',
+      'UNSUPPORTED_DOCUMENT_TYPE',
+      'MISSING_DRIVER_ENTITY',
+    ]);
+    return known.has(error.message)
+      ? error.message
+      : 'PROCESSING_INTERNAL_ERROR';
   }
 }

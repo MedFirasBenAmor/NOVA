@@ -43,6 +43,7 @@ import { AuthModule } from './auth/auth.module';
         REDIS_PORT: Joi.number().port().default(6379),
         OCR_PROVIDER: Joi.string().valid('mock', 'paddle').default('mock'),
         PADDLE_OCR_URL: Joi.string().uri().allow('').optional(),
+        OCR_TIMEOUT_MS: Joi.number().integer().positive().default(30000),
       }),
     }),
     PrismaModule,

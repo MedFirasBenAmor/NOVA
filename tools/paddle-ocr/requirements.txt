@@ -1,0 +1,7 @@
+fastapi==0.141.1
+paddleocr==3.7.0
+paddlepaddle==3.3.1
+pillow==12.3.0
+pypdfium2==5.12.1
+python-multipart==0.0.32
+uvicorn==0.52.1

@@ -9,3 +9,5 @@ coverage
 apps/api/prisma/dev.db
 var/documents/
 apps/api/var/documents/
+artifacts/ocr/
+tools/paddle-ocr/.venv/
