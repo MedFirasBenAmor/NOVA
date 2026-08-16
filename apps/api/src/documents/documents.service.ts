@@ -16,6 +16,7 @@ import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { DocumentQueueService } from './document-queue.service';
 import { DatapointsService } from '../datapoints/datapoints.service';
+import { RequirementProfileService } from '../datapoints/requirement-profile.service';
 import { CollectionStrategyService } from '../collection/collection-strategy.service';
 import {
   DOCUMENT_STORAGE_PROVIDER,
@@ -43,6 +44,7 @@ export class DocumentsService {
     private readonly queue: DocumentQueueService,
     private readonly datapoints: DatapointsService,
     private readonly strategy: CollectionStrategyService,
+    private readonly profiles: RequirementProfileService,
   ) {}
 
   async upload(

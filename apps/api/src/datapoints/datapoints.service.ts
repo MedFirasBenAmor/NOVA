@@ -15,6 +15,10 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { resolveCompleteness } from './completeness.resolver';
 import { UpsertDatapointDto } from './dto/upsert-datapoint.dto';
+import {
+  RequirementProfileService,
+  type SelectedProduct,
+} from './requirement-profile.service';
 
 const scopedEntities = new Set<EntityType>([
   EntityType.VEHICLE,
@@ -24,9 +28,14 @@ const scopedEntities = new Set<EntityType>([
 
 @Injectable()
 export class DatapointsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly profiles: RequirementProfileService,
+  ) {}
 
   definitions(product: Product) {
+    if (this.profiles.isSelectable(product))
+      return this.profiles.forProduct(product);
     return this.prisma.datapointDefinition.findMany({
       where: { product, active: true },
       orderBy: [{ category: 'asc' }, { key: 'asc' }],
@@ -186,12 +195,10 @@ export class DatapointsService {
     });
   }
 
-  async completeness(leadId: string, product: Product) {
+  async completeness(leadId: string, product: SelectedProduct) {
     const folder = await this.folderForLead(this.prisma, leadId);
     const [definitions, values] = await Promise.all([
-      this.prisma.datapointDefinition.findMany({
-        where: { product: { in: [Product.COMMON, product] }, active: true },
-      }),
+      this.profiles.forProduct(product),
       this.prisma.datapointValue.findMany({
         where: { customerFolderId: folder.id },
         include: { definition: { select: { key: true } } },

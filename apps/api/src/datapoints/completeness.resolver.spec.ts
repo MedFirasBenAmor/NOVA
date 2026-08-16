@@ -270,4 +270,67 @@ describe('resolveCompleteness', () => {
     );
     expect(result.completeness).toBe(50);
   });
+
+  it('handles HOME property conditionals without blocking when untriggered', () => {
+    const hasMortgage = definition(
+      'property.has_mortgage',
+      EntityType.PROPERTY,
+      RequirementType.REQUIRED,
+    );
+    const holder = definition(
+      'property.mortgage_holder_name',
+      EntityType.PROPERTY,
+      RequirementType.CONDITIONAL,
+      { key: hasMortgage.key, operator: 'EQ', value: true },
+    );
+    const propertyId = id(40);
+
+    const untriggered = resolveCompleteness(
+      Product.HOME,
+      [hasMortgage, holder],
+      [
+        value(
+          hasMortgage.id,
+          hasMortgage.key,
+          EntityType.PROPERTY,
+          false,
+          propertyId,
+        ),
+      ],
+    );
+    expect(untriggered.missing).toHaveLength(0);
+
+    const triggered = resolveCompleteness(
+      Product.HOME,
+      [hasMortgage, holder],
+      [
+        value(
+          hasMortgage.id,
+          hasMortgage.key,
+          EntityType.PROPERTY,
+          true,
+          propertyId,
+        ),
+      ],
+    );
+    expect(triggered.missing).toEqual([
+      expect.objectContaining({
+        key: holder.key,
+        reason: 'CONDITIONAL',
+        triggeredBy: hasMortgage.key,
+        entityId: propertyId,
+      }),
+    ]);
+  });
+
+  it('does not let optional definitions block completion', () => {
+    const optional = definition(
+      'property.pool_installation_year',
+      EntityType.PROPERTY,
+      RequirementType.OPTIONAL,
+    );
+    const result = resolveCompleteness(Product.HOME, [optional], []);
+    expect(result.completeness).toBe(100);
+    expect(result.missing).toHaveLength(0);
+  });
 });

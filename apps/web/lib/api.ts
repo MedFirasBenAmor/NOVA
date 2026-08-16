@@ -2,6 +2,7 @@ import type {
   CompletenessResponse,
   IntelligenceResult,
   NextAction,
+  SelectableProduct,
 } from '@nova/shared-types';
 
 const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
@@ -58,6 +59,11 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ message }),
     }),
+  selectProduct: (leadId: string, product: SelectableProduct) =>
+    request<{ selectedProduct: SelectableProduct; nextAction: NextAction }>(
+      `/leads/${leadId}/product`,
+      { method: 'POST', body: JSON.stringify({ product }) },
+    ),
   respond: (
     leadId: string,
     actionId: string,

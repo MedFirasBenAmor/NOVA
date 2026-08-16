@@ -137,6 +137,7 @@ function setup(
         .fn()
         .mockResolvedValue({ type: 'COMPLETE', actionId: 'next' }),
     } as never,
+    { selectedForLead: jest.fn().mockResolvedValue(Product.AUTO) } as never,
   );
   return {
     service,

@@ -35,7 +35,9 @@ const usableStatuses = new Set<DatapointStatus>([
 const scopedEntities = new Set<EntityType>([
   EntityType.VEHICLE,
   EntityType.DRIVER,
+  EntityType.PROPERTY,
   EntityType.CLAIM,
+  EntityType.CO_APPLICANT,
 ]);
 
 function isUsable(value: Value | undefined) {

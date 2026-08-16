@@ -1,8 +1,16 @@
-import { Body, Controller, Post, Res } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Res,
+} from '@nestjs/common';
 import type { Response } from 'express';
 import { ConfigService } from '@nestjs/config';
 import { CreateLeadDto } from './dto/create-lead.dto';
 import { LeadsService } from './leads.service';
+import { SelectProductDto } from './dto/select-product.dto';
 
 @Controller('leads')
 export class LeadsController {
@@ -31,5 +39,13 @@ export class LeadsController {
       },
     );
     return safe;
+  }
+
+  @Post(':leadId/product')
+  selectProduct(
+    @Param('leadId', ParseUUIDPipe) leadId: string,
+    @Body() dto: SelectProductDto,
+  ) {
+    return this.leads.selectProduct(leadId, dto.product);
   }
 }

@@ -31,6 +31,8 @@ const autoMethods = [
     client_1.CollectionMethod.TARGETED_CAPTURE,
     client_1.CollectionMethod.API_FETCHED,
 ];
+const homeSources = autoSources;
+const homeMethods = autoMethods;
 function definition(key, label, description, options) {
     const { riskImpact = client_1.ImpactLevel.NONE, eligibilityImpact = client_1.ImpactLevel.NONE, ...rest } = options;
     return {
@@ -630,8 +632,109 @@ const auto = [
         preferredCollectionMethods: autoMethods,
     }),
 ];
+function compactDefinition(item) {
+    const sources = item.product === client_1.Product.HOME ? homeSources : autoSources;
+    const methods = item.product === client_1.Product.HOME ? homeMethods : autoMethods;
+    return definition(item.key, item.label, item.description ?? item.label, {
+        product: item.product,
+        category: item.category,
+        entityType: item.entityType,
+        dataType: item.dataType,
+        requirementType: item.requirementType,
+        possibleSources: sources,
+        preferredCollectionMethods: methods,
+        ...(item.requiredWhen ? { requiredWhen: item.requiredWhen } : {}),
+        ...(item.validationRules ? { validationRules: item.validationRules } : {}),
+    });
+}
+const autoR1 = [
+    compactDefinition({ key: 'vehicle.garage_location', label: 'Garage location', product: client_1.Product.AUTO, category: 'VEHICLE_USE', entityType: client_1.EntityType.VEHICLE, dataType: client_1.DataType.STRING, requirementType: client_1.RequirementType.REQUIRED }),
+    compactDefinition({ key: 'vehicle.winter_tires', label: 'Winter tires', product: client_1.Product.AUTO, category: 'VEHICLE_SECURITY', entityType: client_1.EntityType.VEHICLE, dataType: client_1.DataType.BOOLEAN, requirementType: client_1.RequirementType.REQUIRED }),
+    compactDefinition({ key: 'vehicle.anti_theft_marking', label: 'Anti-theft marking', product: client_1.Product.AUTO, category: 'VEHICLE_SECURITY', entityType: client_1.EntityType.VEHICLE, dataType: client_1.DataType.BOOLEAN, requirementType: client_1.RequirementType.OPTIONAL }),
+    compactDefinition({ key: 'driver.training_completed', label: 'Driver training completed', product: client_1.Product.AUTO, category: 'DRIVER', entityType: client_1.EntityType.DRIVER, dataType: client_1.DataType.BOOLEAN, requirementType: client_1.RequirementType.REQUIRED }),
+    compactDefinition({ key: 'driver.years_licensed_other_jurisdiction', label: 'Years licensed outside Quebec', product: client_1.Product.AUTO, category: 'DRIVER', entityType: client_1.EntityType.DRIVER, dataType: client_1.DataType.NUMBER, requirementType: client_1.RequirementType.REQUIRED }),
+    compactDefinition({ key: 'auto.prior_policy_expiry_date', label: 'Prior auto policy expiry date', product: client_1.Product.AUTO, category: 'CURRENT_AUTO_INSURANCE', entityType: client_1.EntityType.CUSTOMER, dataType: client_1.DataType.DATE, requirementType: client_1.RequirementType.REQUIRED }),
+    compactDefinition({ key: 'auto.liability_limit_requested', label: 'Requested auto liability limit', product: client_1.Product.AUTO, category: 'AUTO_COVERAGE', entityType: client_1.EntityType.CUSTOMER, dataType: client_1.DataType.NUMBER, requirementType: client_1.RequirementType.REQUIRED }),
+    compactDefinition({ key: 'vehicle.multi_vehicle_policy_requested', label: 'Multi-vehicle policy requested', product: client_1.Product.AUTO, category: 'AUTO_COVERAGE', entityType: client_1.EntityType.VEHICLE, dataType: client_1.DataType.BOOLEAN, requirementType: client_1.RequirementType.REQUIRED }),
+];
+const homeRequired = [
+    { key: 'property.address.street', label: 'Property street address', product: client_1.Product.HOME, category: 'PROPERTY_ADDRESS', entityType: client_1.EntityType.PROPERTY, dataType: client_1.DataType.STRING, requirementType: client_1.RequirementType.REQUIRED },
+    { key: 'property.address.city', label: 'Property city', product: client_1.Product.HOME, category: 'PROPERTY_ADDRESS', entityType: client_1.EntityType.PROPERTY, dataType: client_1.DataType.STRING, requirementType: client_1.RequirementType.REQUIRED },
+    { key: 'property.address.region', label: 'Property region', product: client_1.Product.HOME, category: 'PROPERTY_ADDRESS', entityType: client_1.EntityType.PROPERTY, dataType: client_1.DataType.STRING, requirementType: client_1.RequirementType.REQUIRED },
+    { key: 'property.address.postal_code', label: 'Property postal code', product: client_1.Product.HOME, category: 'PROPERTY_ADDRESS', entityType: client_1.EntityType.PROPERTY, dataType: client_1.DataType.STRING, requirementType: client_1.RequirementType.REQUIRED },
+    { key: 'property.address.country', label: 'Property country', product: client_1.Product.HOME, category: 'PROPERTY_ADDRESS', entityType: client_1.EntityType.PROPERTY, dataType: client_1.DataType.STRING, requirementType: client_1.RequirementType.REQUIRED },
+    { key: 'property.ownership_status', label: 'Ownership status', product: client_1.Product.HOME, category: 'PROPERTY_OCCUPANCY', entityType: client_1.EntityType.PROPERTY, dataType: client_1.DataType.ENUM, requirementType: client_1.RequirementType.REQUIRED, validationRules: { allowedValues: ['OWNER', 'TENANT', 'LANDLORD'] } },
+    { key: 'property.occupancy_type', label: 'Occupancy type', product: client_1.Product.HOME, category: 'PROPERTY_OCCUPANCY', entityType: client_1.EntityType.PROPERTY, dataType: client_1.DataType.ENUM, requirementType: client_1.RequirementType.REQUIRED, validationRules: { allowedValues: ['PRIMARY', 'SECONDARY', 'SEASONAL', 'RENTAL'] } },
+    { key: 'property.dwelling_type', label: 'Dwelling type', product: client_1.Product.HOME, category: 'PROPERTY_BUILDING', entityType: client_1.EntityType.PROPERTY, dataType: client_1.DataType.ENUM, requirementType: client_1.RequirementType.REQUIRED, validationRules: { allowedValues: ['DETACHED', 'SEMI_DETACHED', 'TOWNHOUSE', 'CONDO', 'DUPLEX', 'TRIPLEX'] } },
+    { key: 'property.year_built', label: 'Year built', product: client_1.Product.HOME, category: 'PROPERTY_BUILDING', entityType: client_1.EntityType.PROPERTY, dataType: client_1.DataType.NUMBER, requirementType: client_1.RequirementType.REQUIRED },
+    { key: 'property.purchase_date', label: 'Purchase date', product: client_1.Product.HOME, category: 'PROPERTY_BUILDING', entityType: client_1.EntityType.PROPERTY, dataType: client_1.DataType.DATE, requirementType: client_1.RequirementType.REQUIRED },
+    { key: 'property.reconstruction_cost', label: 'Reconstruction cost', product: client_1.Product.HOME, category: 'PROPERTY_VALUATION', entityType: client_1.EntityType.PROPERTY, dataType: client_1.DataType.NUMBER, requirementType: client_1.RequirementType.REQUIRED },
+    { key: 'property.market_value', label: 'Market value', product: client_1.Product.HOME, category: 'PROPERTY_VALUATION', entityType: client_1.EntityType.PROPERTY, dataType: client_1.DataType.NUMBER, requirementType: client_1.RequirementType.REQUIRED },
+    { key: 'property.living_area_sqft', label: 'Living area', product: client_1.Product.HOME, category: 'PROPERTY_BUILDING', entityType: client_1.EntityType.PROPERTY, dataType: client_1.DataType.NUMBER, requirementType: client_1.RequirementType.REQUIRED },
+    { key: 'property.number_of_storeys', label: 'Number of storeys', product: client_1.Product.HOME, category: 'PROPERTY_BUILDING', entityType: client_1.EntityType.PROPERTY, dataType: client_1.DataType.NUMBER, requirementType: client_1.RequirementType.REQUIRED },
+    { key: 'property.construction_type', label: 'Construction type', product: client_1.Product.HOME, category: 'PROPERTY_BUILDING', entityType: client_1.EntityType.PROPERTY, dataType: client_1.DataType.ENUM, requirementType: client_1.RequirementType.REQUIRED, validationRules: { allowedValues: ['WOOD_FRAME', 'MASONRY', 'CONCRETE', 'STEEL', 'OTHER'] } },
+    { key: 'property.roof_type', label: 'Roof type', product: client_1.Product.HOME, category: 'PROPERTY_BUILDING', entityType: client_1.EntityType.PROPERTY, dataType: client_1.DataType.ENUM, requirementType: client_1.RequirementType.REQUIRED, validationRules: { allowedValues: ['ASPHALT_SHINGLE', 'METAL', 'TILE', 'FLAT', 'OTHER'] } },
+    { key: 'property.roof_year', label: 'Roof year', product: client_1.Product.HOME, category: 'PROPERTY_BUILDING', entityType: client_1.EntityType.PROPERTY, dataType: client_1.DataType.NUMBER, requirementType: client_1.RequirementType.REQUIRED },
+    { key: 'property.heating_type', label: 'Heating type', product: client_1.Product.HOME, category: 'PROPERTY_SYSTEMS', entityType: client_1.EntityType.PROPERTY, dataType: client_1.DataType.ENUM, requirementType: client_1.RequirementType.REQUIRED, validationRules: { allowedValues: ['ELECTRIC', 'GAS', 'OIL', 'WOOD', 'HEAT_PUMP', 'OTHER'] } },
+    { key: 'property.primary_heat_source', label: 'Primary heat source', product: client_1.Product.HOME, category: 'PROPERTY_SYSTEMS', entityType: client_1.EntityType.PROPERTY, dataType: client_1.DataType.STRING, requirementType: client_1.RequirementType.REQUIRED },
+    { key: 'property.electrical_panel_amps', label: 'Electrical panel amps', product: client_1.Product.HOME, category: 'PROPERTY_SYSTEMS', entityType: client_1.EntityType.PROPERTY, dataType: client_1.DataType.NUMBER, requirementType: client_1.RequirementType.REQUIRED },
+    { key: 'property.plumbing_type', label: 'Plumbing type', product: client_1.Product.HOME, category: 'PROPERTY_SYSTEMS', entityType: client_1.EntityType.PROPERTY, dataType: client_1.DataType.ENUM, requirementType: client_1.RequirementType.REQUIRED, validationRules: { allowedValues: ['COPPER', 'PEX', 'GALVANIZED', 'POLY_B', 'OTHER'] } },
+    { key: 'property.foundation_type', label: 'Foundation type', product: client_1.Product.HOME, category: 'PROPERTY_BUILDING', entityType: client_1.EntityType.PROPERTY, dataType: client_1.DataType.ENUM, requirementType: client_1.RequirementType.REQUIRED, validationRules: { allowedValues: ['CONCRETE', 'BLOCK', 'STONE', 'SLAB', 'PIERS', 'OTHER'] } },
+    { key: 'property.basement_type', label: 'Basement type', product: client_1.Product.HOME, category: 'PROPERTY_BUILDING', entityType: client_1.EntityType.PROPERTY, dataType: client_1.DataType.ENUM, requirementType: client_1.RequirementType.REQUIRED, validationRules: { allowedValues: ['NONE', 'CRAWLSPACE', 'PARTIAL', 'FULL', 'WALKOUT'] } },
+    { key: 'property.distance_to_fire_hydrant_m', label: 'Distance to fire hydrant', product: client_1.Product.HOME, category: 'PROPERTY_PROTECTION', entityType: client_1.EntityType.PROPERTY, dataType: client_1.DataType.NUMBER, requirementType: client_1.RequirementType.REQUIRED },
+    { key: 'property.distance_to_fire_station_km', label: 'Distance to fire station', product: client_1.Product.HOME, category: 'PROPERTY_PROTECTION', entityType: client_1.EntityType.PROPERTY, dataType: client_1.DataType.NUMBER, requirementType: client_1.RequirementType.REQUIRED },
+    { key: 'property.has_mortgage', label: 'Has mortgage', product: client_1.Product.HOME, category: 'PROPERTY_FINANCE', entityType: client_1.EntityType.PROPERTY, dataType: client_1.DataType.BOOLEAN, requirementType: client_1.RequirementType.REQUIRED },
+    { key: 'property.has_alarm_system', label: 'Has alarm system', product: client_1.Product.HOME, category: 'PROPERTY_PROTECTION', entityType: client_1.EntityType.PROPERTY, dataType: client_1.DataType.BOOLEAN, requirementType: client_1.RequirementType.REQUIRED },
+    { key: 'property.has_smoke_detectors', label: 'Has smoke detectors', product: client_1.Product.HOME, category: 'PROPERTY_PROTECTION', entityType: client_1.EntityType.PROPERTY, dataType: client_1.DataType.BOOLEAN, requirementType: client_1.RequirementType.REQUIRED },
+    { key: 'property.has_carbon_monoxide_detectors', label: 'Has carbon monoxide detectors', product: client_1.Product.HOME, category: 'PROPERTY_PROTECTION', entityType: client_1.EntityType.PROPERTY, dataType: client_1.DataType.BOOLEAN, requirementType: client_1.RequirementType.REQUIRED },
+    { key: 'property.has_sump_pump', label: 'Has sump pump', product: client_1.Product.HOME, category: 'PROPERTY_WATER', entityType: client_1.EntityType.PROPERTY, dataType: client_1.DataType.BOOLEAN, requirementType: client_1.RequirementType.REQUIRED },
+    { key: 'property.has_backwater_valve', label: 'Has backwater valve', product: client_1.Product.HOME, category: 'PROPERTY_WATER', entityType: client_1.EntityType.PROPERTY, dataType: client_1.DataType.BOOLEAN, requirementType: client_1.RequirementType.REQUIRED },
+    { key: 'property.has_pool_spa', label: 'Has pool or spa', product: client_1.Product.HOME, category: 'PROPERTY_EXTERIOR', entityType: client_1.EntityType.PROPERTY, dataType: client_1.DataType.BOOLEAN, requirementType: client_1.RequirementType.REQUIRED },
+    { key: 'property.has_animals', label: 'Has animals', product: client_1.Product.HOME, category: 'PROPERTY_RISK', entityType: client_1.EntityType.PROPERTY, dataType: client_1.DataType.BOOLEAN, requirementType: client_1.RequirementType.REQUIRED },
+    { key: 'property.business_use', label: 'Business use', product: client_1.Product.HOME, category: 'PROPERTY_RISK', entityType: client_1.EntityType.PROPERTY, dataType: client_1.DataType.BOOLEAN, requirementType: client_1.RequirementType.REQUIRED },
+    { key: 'property.short_term_rental', label: 'Short-term rental', product: client_1.Product.HOME, category: 'PROPERTY_RISK', entityType: client_1.EntityType.PROPERTY, dataType: client_1.DataType.BOOLEAN, requirementType: client_1.RequirementType.REQUIRED },
+    { key: 'property.vacant_or_unoccupied', label: 'Vacant or unoccupied', product: client_1.Product.HOME, category: 'PROPERTY_RISK', entityType: client_1.EntityType.PROPERTY, dataType: client_1.DataType.BOOLEAN, requirementType: client_1.RequirementType.REQUIRED },
+    { key: 'property.claims_last_5_years', label: 'Property claims in last five years', product: client_1.Product.HOME, category: 'PROPERTY_CLAIMS', entityType: client_1.EntityType.PROPERTY, dataType: client_1.DataType.BOOLEAN, requirementType: client_1.RequirementType.REQUIRED },
+    { key: 'property.prior_insurer', label: 'Prior home insurer', product: client_1.Product.HOME, category: 'PROPERTY_INSURANCE', entityType: client_1.EntityType.PROPERTY, dataType: client_1.DataType.STRING, requirementType: client_1.RequirementType.REQUIRED },
+    { key: 'property.coverage_start_date', label: 'Home coverage start date', product: client_1.Product.HOME, category: 'PROPERTY_INSURANCE', entityType: client_1.EntityType.PROPERTY, dataType: client_1.DataType.DATE, requirementType: client_1.RequirementType.REQUIRED },
+    { key: 'property.has_co_applicant', label: 'Has co-applicant', product: client_1.Product.HOME, category: 'CO_APPLICANT', entityType: client_1.EntityType.PROPERTY, dataType: client_1.DataType.BOOLEAN, requirementType: client_1.RequirementType.REQUIRED },
+];
+const homeOptional = [
+    { key: 'property.inspection_date', label: 'Inspection date', product: client_1.Product.HOME, category: 'PROPERTY_BUILDING', entityType: client_1.EntityType.PROPERTY, dataType: client_1.DataType.DATE, requirementType: client_1.RequirementType.OPTIONAL },
+    { key: 'property.renovations_summary', label: 'Renovations summary', product: client_1.Product.HOME, category: 'PROPERTY_BUILDING', entityType: client_1.EntityType.PROPERTY, dataType: client_1.DataType.OBJECT, requirementType: client_1.RequirementType.OPTIONAL },
+    { key: 'property.detached_structures', label: 'Detached structures', product: client_1.Product.HOME, category: 'PROPERTY_EXTERIOR', entityType: client_1.EntityType.PROPERTY, dataType: client_1.DataType.OBJECT, requirementType: client_1.RequirementType.OPTIONAL },
+    { key: 'property.security_camera', label: 'Security camera', product: client_1.Product.HOME, category: 'PROPERTY_PROTECTION', entityType: client_1.EntityType.PROPERTY, dataType: client_1.DataType.BOOLEAN, requirementType: client_1.RequirementType.OPTIONAL },
+    { key: 'property.pool_installation_year', label: 'Pool or spa installation year', description: 'BUSINESS_VALIDATION_REQUIRED: condition semantics unresolved; not used as a blocking conditional in R1.', product: client_1.Product.HOME, category: 'PROPERTY_EXTERIOR', entityType: client_1.EntityType.PROPERTY, dataType: client_1.DataType.NUMBER, requirementType: client_1.RequirementType.OPTIONAL },
+    { key: 'property.pool_spa_fenced', label: 'Pool or spa fenced', description: 'BUSINESS_VALIDATION_REQUIRED: condition semantics unresolved; not used as a blocking conditional in R1.', product: client_1.Product.HOME, category: 'PROPERTY_EXTERIOR', entityType: client_1.EntityType.PROPERTY, dataType: client_1.DataType.BOOLEAN, requirementType: client_1.RequirementType.OPTIONAL },
+    { key: 'property.valuable_items_summary', label: 'Valuable items summary', product: client_1.Product.HOME, category: 'PROPERTY_CONTENTS', entityType: client_1.EntityType.PROPERTY, dataType: client_1.DataType.OBJECT, requirementType: client_1.RequirementType.OPTIONAL },
+    { key: 'co_applicant.relationship', label: 'Co-applicant relationship', product: client_1.Product.HOME, category: 'CO_APPLICANT', entityType: client_1.EntityType.CO_APPLICANT, dataType: client_1.DataType.STRING, requirementType: client_1.RequirementType.OPTIONAL },
+    { key: 'co_applicant.email', label: 'Co-applicant email', product: client_1.Product.HOME, category: 'CO_APPLICANT', entityType: client_1.EntityType.CO_APPLICANT, dataType: client_1.DataType.STRING, requirementType: client_1.RequirementType.OPTIONAL },
+];
+const homeConditional = [
+    { key: 'property.mortgage_holder_name', label: 'Mortgage holder name', product: client_1.Product.HOME, category: 'PROPERTY_FINANCE', entityType: client_1.EntityType.PROPERTY, dataType: client_1.DataType.STRING, requirementType: client_1.RequirementType.CONDITIONAL, requiredWhen: { key: 'property.has_mortgage', operator: 'EQ', value: true } },
+    { key: 'property.mortgage_loan_number', label: 'Mortgage loan number', product: client_1.Product.HOME, category: 'PROPERTY_FINANCE', entityType: client_1.EntityType.PROPERTY, dataType: client_1.DataType.STRING, requirementType: client_1.RequirementType.CONDITIONAL, requiredWhen: { key: 'property.has_mortgage', operator: 'EQ', value: true } },
+    { key: 'property.alarm_monitoring_company', label: 'Alarm monitoring company', product: client_1.Product.HOME, category: 'PROPERTY_PROTECTION', entityType: client_1.EntityType.PROPERTY, dataType: client_1.DataType.STRING, requirementType: client_1.RequirementType.CONDITIONAL, requiredWhen: { key: 'property.has_alarm_system', operator: 'EQ', value: true } },
+    { key: 'property.sump_pump_battery_backup', label: 'Sump pump battery backup', product: client_1.Product.HOME, category: 'PROPERTY_WATER', entityType: client_1.EntityType.PROPERTY, dataType: client_1.DataType.BOOLEAN, requirementType: client_1.RequirementType.CONDITIONAL, requiredWhen: { key: 'property.has_sump_pump', operator: 'EQ', value: true } },
+    { key: 'property.business_use_type', label: 'Business use type', description: 'BUSINESS_VALIDATION_REQUIRED: commercial use type taxonomy requires validation.', product: client_1.Product.HOME, category: 'PROPERTY_RISK', entityType: client_1.EntityType.PROPERTY, dataType: client_1.DataType.STRING, requirementType: client_1.RequirementType.CONDITIONAL, requiredWhen: { key: 'property.business_use', operator: 'EQ', value: true } },
+    { key: 'property.business_clients_on_premises', label: 'Business clients on premises', product: client_1.Product.HOME, category: 'PROPERTY_RISK', entityType: client_1.EntityType.PROPERTY, dataType: client_1.DataType.BOOLEAN, requirementType: client_1.RequirementType.CONDITIONAL, requiredWhen: { key: 'property.business_use', operator: 'EQ', value: true } },
+    { key: 'property.short_term_rental_platform', label: 'Short-term rental platform', product: client_1.Product.HOME, category: 'PROPERTY_RISK', entityType: client_1.EntityType.PROPERTY, dataType: client_1.DataType.STRING, requirementType: client_1.RequirementType.CONDITIONAL, requiredWhen: { key: 'property.short_term_rental', operator: 'EQ', value: true } },
+    { key: 'property.vacancy_reason', label: 'Vacancy reason', product: client_1.Product.HOME, category: 'PROPERTY_RISK', entityType: client_1.EntityType.PROPERTY, dataType: client_1.DataType.STRING, requirementType: client_1.RequirementType.CONDITIONAL, requiredWhen: { key: 'property.vacant_or_unoccupied', operator: 'EQ', value: true } },
+    { key: 'property.claim_count_last_5_years', label: 'Property claim count last five years', description: 'BUSINESS_VALIDATION_REQUIRED: count/date semantics require validation.', product: client_1.Product.HOME, category: 'PROPERTY_CLAIMS', entityType: client_1.EntityType.PROPERTY, dataType: client_1.DataType.NUMBER, requirementType: client_1.RequirementType.CONDITIONAL, requiredWhen: { key: 'property.claims_last_5_years', operator: 'EQ', value: true } },
+    { key: 'property.claim_most_recent_year', label: 'Most recent property claim year', description: 'BUSINESS_VALIDATION_REQUIRED: claim date/year semantics require validation.', product: client_1.Product.HOME, category: 'PROPERTY_CLAIMS', entityType: client_1.EntityType.PROPERTY, dataType: client_1.DataType.NUMBER, requirementType: client_1.RequirementType.CONDITIONAL, requiredWhen: { key: 'property.claims_last_5_years', operator: 'EQ', value: true } },
+    { key: 'property.claim_type', label: 'Property claim type', product: client_1.Product.HOME, category: 'PROPERTY_CLAIMS', entityType: client_1.EntityType.PROPERTY, dataType: client_1.DataType.STRING, requirementType: client_1.RequirementType.CONDITIONAL, requiredWhen: { key: 'property.claims_last_5_years', operator: 'EQ', value: true } },
+    { key: 'property.animal_type', label: 'Animal type', description: 'BUSINESS_VALIDATION_REQUIRED: animals taxonomy requires validation.', product: client_1.Product.HOME, category: 'PROPERTY_RISK', entityType: client_1.EntityType.PROPERTY, dataType: client_1.DataType.STRING, requirementType: client_1.RequirementType.CONDITIONAL, requiredWhen: { key: 'property.has_animals', operator: 'EQ', value: true } },
+    { key: 'property.dog_breed', label: 'Dog breed', description: 'BUSINESS_VALIDATION_REQUIRED: animal/dog-specific semantics require validation.', product: client_1.Product.HOME, category: 'PROPERTY_RISK', entityType: client_1.EntityType.PROPERTY, dataType: client_1.DataType.STRING, requirementType: client_1.RequirementType.CONDITIONAL, requiredWhen: { key: 'property.has_animals', operator: 'EQ', value: true } },
+    { key: 'co_applicant.first_name', label: 'Co-applicant first name', description: 'BUSINESS_VALIDATION_REQUIRED: exact co-applicant required subset requires validation.', product: client_1.Product.HOME, category: 'CO_APPLICANT', entityType: client_1.EntityType.CO_APPLICANT, dataType: client_1.DataType.STRING, requirementType: client_1.RequirementType.CONDITIONAL, requiredWhen: { key: 'property.has_co_applicant', operator: 'EQ', value: true } },
+    { key: 'co_applicant.last_name', label: 'Co-applicant last name', description: 'BUSINESS_VALIDATION_REQUIRED: exact co-applicant required subset requires validation.', product: client_1.Product.HOME, category: 'CO_APPLICANT', entityType: client_1.EntityType.CO_APPLICANT, dataType: client_1.DataType.STRING, requirementType: client_1.RequirementType.CONDITIONAL, requiredWhen: { key: 'property.has_co_applicant', operator: 'EQ', value: true } },
+    { key: 'co_applicant.date_of_birth', label: 'Co-applicant date of birth', description: 'BUSINESS_VALIDATION_REQUIRED: exact co-applicant required subset requires validation.', product: client_1.Product.HOME, category: 'CO_APPLICANT', entityType: client_1.EntityType.CO_APPLICANT, dataType: client_1.DataType.DATE, requirementType: client_1.RequirementType.CONDITIONAL, requiredWhen: { key: 'property.has_co_applicant', operator: 'EQ', value: true } },
+];
+const home = [
+    ...homeRequired,
+    ...homeOptional,
+    ...homeConditional,
+].map(compactDefinition);
 async function main() {
-    for (const item of [...common, ...auto]) {
+    for (const item of [...common, ...auto, ...autoR1, ...home]) {
         const { key, version, ...data } = item;
         await prisma.datapointDefinition.upsert({
             where: { key_version: { key, version } },
@@ -639,7 +742,7 @@ async function main() {
             create: { key, version, ...data },
         });
     }
-    console.log(`Seeded ${common.length} COMMON and ${auto.length} AUTO datapoint definitions.`);
+    console.log(`Seeded ${common.length} COMMON, ${auto.length + autoR1.length} AUTO, and ${home.length} HOME datapoint definitions.`);
 }
 main()
     .catch((error) => {
@@ -647,4 +750,3 @@ main()
     process.exitCode = 1;
 })
     .finally(() => prisma.$disconnect());
-//# sourceMappingURL=seed.js.map

@@ -4,7 +4,6 @@ import {
   CollectionAttemptStatus,
   DataType,
   EntityType,
-  Product,
   type DatapointDefinition,
 } from '@prisma/client';
 import type { CompletenessResponse, NextAction } from '@nova/shared-types';
@@ -12,6 +11,10 @@ import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { DatapointsService } from '../datapoints/datapoints.service';
 import { resolveCompleteness } from '../datapoints/completeness.resolver';
+import {
+  RequirementProfileService,
+  type SelectedProduct,
+} from '../datapoints/requirement-profile.service';
 import { ConversationsService } from '../conversations/conversations.service';
 import {
   COLLECTION_CAPABILITIES,
@@ -25,21 +28,39 @@ type DatapointUi = {
 
 @Injectable()
 export class CollectionStrategyService {
+  productSelectionAction(): NextAction {
+    return {
+      type: 'SELECT_PRODUCT',
+      actionId: 'select-product',
+      options: [
+        { value: 'AUTO', label: 'Auto' },
+        { value: 'HOME', label: 'Home' },
+        { value: 'AUTO_HOME', label: 'Auto + Home' },
+      ],
+    };
+  }
+
+  async selectForLead(leadId: string): Promise<NextAction> {
+    const product = await this.profiles.selectedForLead(leadId);
+    if (!product) return this.productSelectionAction();
+    const completeness = await this.datapoints.completeness(leadId, product);
+    return this.select(leadId, product, completeness);
+  }
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly datapoints: DatapointsService,
     private readonly conversations: ConversationsService,
+    private readonly profiles: RequirementProfileService,
   ) {}
 
   async select(
     leadId: string,
-    product: Product,
+    product: SelectedProduct,
     completeness: CompletenessResponse,
   ): Promise<NextAction> {
     const [definitions, attempts, documents] = await Promise.all([
-      this.prisma.datapointDefinition.findMany({
-        where: { product: { in: [Product.COMMON, product] }, active: true },
-      }),
+      this.profiles.forProduct(product),
       this.prisma.collectionAttempt.findMany({
         where: { leadId },
         orderBy: { createdAt: 'desc' },
@@ -229,12 +250,10 @@ export class CollectionStrategyService {
       include: { definition: true },
     });
     const product = attempt.product;
-    const defs = await this.prisma.datapointDefinition.findMany({
-      where: { product: { in: [Product.COMMON, product] }, active: true },
-    });
+    const defs = await this.profiles.forProduct(product as SelectedProduct);
     const nextAction = await this.select(
       leadId,
-      product,
+      product as SelectedProduct,
       resolveCompleteness(product, defs, completeness),
     );
     return {
@@ -289,12 +308,7 @@ export class CollectionStrategyService {
       },
     });
     const [definitions, values] = await Promise.all([
-      this.prisma.datapointDefinition.findMany({
-        where: {
-          product: { in: [Product.COMMON, attempt.product] },
-          active: true,
-        },
-      }),
+      this.profiles.forProduct(attempt.product as SelectedProduct),
       this.prisma.datapointValue.findMany({
         where: { customerFolder: { leadId } },
         include: { definition: true },
@@ -308,7 +322,11 @@ export class CollectionStrategyService {
     return {
       datapoint,
       completeness,
-      nextAction: await this.select(leadId, attempt.product, completeness),
+      nextAction: await this.select(
+        leadId,
+        attempt.product as SelectedProduct,
+        completeness,
+      ),
     };
   }
 

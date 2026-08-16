@@ -1,6 +1,7 @@
 export type HealthResponse = { status: 'ok' };
 
-export type DatapointProduct = 'COMMON' | 'AUTO' | 'HOME';
+export type DatapointProduct = 'COMMON' | 'AUTO' | 'HOME' | 'AUTO_HOME';
+export type SelectableProduct = 'AUTO' | 'HOME' | 'AUTO_HOME';
 export type MissingReason = 'REQUIRED' | 'CONDITIONAL';
 
 export type CompletenessItem = {
@@ -31,7 +32,7 @@ export type IntelligenceIntentType =
   | 'DOCUMENT_REFUSAL'
   | 'GENERAL_INQUIRY';
 
-export type IntelligenceProductType = 'COMMON' | 'AUTO' | 'HOME';
+export type IntelligenceProductType = 'COMMON' | 'AUTO' | 'HOME' | 'AUTO_HOME';
 
 export type IntelligenceEventType =
   | 'VEHICLE_PURCHASE'
@@ -43,7 +44,13 @@ export type IntelligenceEventType =
 export type IntelligenceExtractionMethod =
   'EXTRACTED' | 'ENRICHED' | 'INFERRED';
 export type IntelligenceEntityType =
-  'CUSTOMER' | 'VEHICLE' | 'DRIVER' | 'CLAIM' | 'REQUEST';
+  | 'CUSTOMER'
+  | 'VEHICLE'
+  | 'DRIVER'
+  | 'PROPERTY'
+  | 'CLAIM'
+  | 'CO_APPLICANT'
+  | 'REQUEST';
 
 export type IntelligenceCatalogItem = {
   key: string;
@@ -155,5 +162,10 @@ export type NextAction =
       documentId: string;
       documentType: string;
       status: 'UPLOADED' | 'PROCESSING';
+    }
+  | {
+      type: 'SELECT_PRODUCT';
+      actionId: string;
+      options: Array<{ value: SelectableProduct; label: string }>;
     }
   | { type: 'COMPLETE'; actionId: string };

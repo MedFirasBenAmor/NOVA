@@ -33,7 +33,11 @@ const definition = (
   updatedAt: new Date(),
 });
 
-function serviceWith(result: object, definitions: object[]) {
+function serviceWith(
+  result: object,
+  definitions: object[],
+  selectedProduct: Product | undefined = Product.AUTO,
+) {
   const prisma = {
     lead: { findUnique: jest.fn().mockResolvedValue({ id: leadId }) },
     datapointDefinition: { findMany: jest.fn().mockResolvedValue(definitions) },
@@ -42,7 +46,16 @@ function serviceWith(result: object, definitions: object[]) {
       createMany: jest.fn().mockResolvedValue({ count: 1 }),
     },
   };
-  const prismaForValidation = new DatapointsService({} as never);
+  const prismaForValidation = new DatapointsService({} as never, {} as never);
+  const profiles = {
+    selectedForLead: jest.fn().mockResolvedValue(selectedProduct),
+    forProduct: jest.fn().mockResolvedValue(definitions),
+    isSelectable: jest.fn((product: Product) =>
+      [Product.AUTO, Product.HOME, Product.AUTO_HOME].includes(
+        product as never,
+      ),
+    ),
+  };
   const datapoints = {
     values: jest.fn().mockResolvedValue([]),
     validateInput: prismaForValidation.validateInput.bind(prismaForValidation),
@@ -69,10 +82,17 @@ function serviceWith(result: object, definitions: object[]) {
         select: jest
           .fn()
           .mockResolvedValue({ type: 'COMPLETE', actionId: 'action' }),
+        productSelectionAction: jest.fn().mockReturnValue({
+          type: 'SELECT_PRODUCT',
+          actionId: 'select-product',
+          options: [],
+        }),
       } as never,
+      profiles as never,
     ),
     prisma,
     datapoints,
+    profiles,
   };
 }
 
@@ -197,6 +217,50 @@ describe('IntelligenceService', () => {
       acceptedCandidateDatapoints: 0,
       rejectedCandidateDatapoints: 0,
     });
+  });
+
+  it.each([Product.AUTO, Product.HOME, Product.AUTO_HOME])(
+    'keeps selected %s authoritative over provider product output',
+    async (selectedProduct) => {
+      const definitions = [definition('vehicle.model', DataType.STRING)];
+      const { service, datapoints, profiles } = serviceWith(
+        {
+          intent: { type: 'INSURANCE_SHOPPING', confidence: 0.9 },
+          product: {
+            type: selectedProduct === Product.HOME ? 'AUTO' : 'HOME',
+            confidence: 0.99,
+          },
+          events: [],
+          candidateDatapoints: [],
+        },
+        definitions,
+        selectedProduct,
+      );
+
+      await service.analyze(leadId, { message: 'synthetic message' });
+      expect(profiles.forProduct).toHaveBeenCalledWith(selectedProduct);
+      expect(datapoints.completeness).toHaveBeenCalledWith(
+        leadId,
+        selectedProduct,
+      );
+    },
+  );
+
+  it('returns SELECT_PRODUCT when no product is selected and provider confidence is not authoritative', async () => {
+    const { service, datapoints, profiles } = serviceWith(
+      {
+        intent: { type: 'GENERAL_INQUIRY', confidence: 0.7 },
+        product: { type: 'COMMON', confidence: 0.7 },
+        events: [],
+        candidateDatapoints: [],
+      },
+      [],
+      undefined,
+    );
+    profiles.selectedForLead.mockResolvedValueOnce(undefined);
+    const response = await service.analyze(leadId, { message: 'Hello' });
+    expect(response.nextAction.type).toBe('SELECT_PRODUCT');
+    expect(datapoints.completeness).not.toHaveBeenCalled();
   });
 
   it('rejects malformed provider output before ingestion', async () => {

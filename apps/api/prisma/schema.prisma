@@ -31,6 +31,7 @@ model Lead {
   id                 String              @id @default(uuid()) @db.Uuid
   customerId         String?             @db.Uuid
   customer           Customer?           @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  selectedProduct    Product?
   folder             CustomerFolder?
   conversations      Conversation[]
   source             String?
@@ -85,6 +86,7 @@ model ConversationMessage {
 }
 
 enum CollectionActionType {
+  SELECT_PRODUCT
   SUGGEST_FULL_DOCUMENT
   SUGGEST_TARGETED_CAPTURE
   ASK_DATAPOINT
@@ -196,6 +198,7 @@ enum Product {
   COMMON
   AUTO
   HOME
+  AUTO_HOME
 }
 
 enum DataType {
@@ -265,7 +268,9 @@ enum EntityType {
   CUSTOMER
   VEHICLE
   DRIVER
+  PROPERTY
   CLAIM
+  CO_APPLICANT
   REQUEST
 }
 

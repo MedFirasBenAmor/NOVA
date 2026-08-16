@@ -23,7 +23,7 @@ describe('DatapointsService', () => {
         callback(tx),
       ),
     } as never;
-    const service = new DatapointsService(prisma);
+    const service = new DatapointsService(prisma, {} as never);
 
     await expect(
       service.upsert(leadId, {
@@ -64,7 +64,7 @@ describe('DatapointsService', () => {
         callback(tx),
       ),
     } as never;
-    const service = new DatapointsService(prisma);
+    const service = new DatapointsService(prisma, {} as never);
 
     await service.upsert(leadId, {
       key: definition.key,
@@ -122,11 +122,14 @@ describe('DatapointsService', () => {
       },
       auditEvent: { createMany: jest.fn().mockResolvedValue({ count: 2 }) },
     };
-    const service = new DatapointsService({
-      $transaction: jest.fn((callback: (value: unknown) => unknown) =>
-        callback(tx),
-      ),
-    } as never);
+    const service = new DatapointsService(
+      {
+        $transaction: jest.fn((callback: (value: unknown) => unknown) =>
+          callback(tx),
+        ),
+      } as never,
+      {} as never,
+    );
 
     const result = await service.upsertCandidate(leadId, {
       key: definition.key,

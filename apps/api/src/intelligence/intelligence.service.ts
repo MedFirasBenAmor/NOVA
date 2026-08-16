@@ -29,6 +29,10 @@ import { CreateInteractionDto } from './dto/create-interaction.dto';
 import { ConversationsService } from '../conversations/conversations.service';
 import { CollectionStrategyService } from '../collection/collection-strategy.service';
 import {
+  RequirementProfileService,
+  type SelectedProduct,
+} from '../datapoints/requirement-profile.service';
+import {
   INTELLIGENCE_PROVIDER,
   type IntelligenceProvider,
 } from './intelligence.provider';
@@ -72,6 +76,7 @@ export class IntelligenceService {
     private readonly datapoints: DatapointsService,
     private readonly conversations: ConversationsService,
     private readonly strategy: CollectionStrategyService,
+    private readonly profiles: RequirementProfileService,
   ) {}
 
   async analyze(leadId: string, dto: CreateInteractionDto) {
@@ -80,17 +85,10 @@ export class IntelligenceService {
     await this.conversations.addCustomerMessage(leadId, dto.message);
 
     const values = await this.datapoints.values(leadId);
-    const currentProduct = values.some(
-      (value) => value.definition.product === Product.AUTO,
-    )
-      ? Product.AUTO
-      : undefined;
-    const definitions = await this.prisma.datapointDefinition.findMany({
-      where: {
-        active: true,
-        product: { in: [Product.COMMON, currentProduct ?? Product.AUTO] },
-      },
-    });
+    const currentProduct = await this.profiles.selectedForLead(leadId);
+    const definitions = currentProduct
+      ? await this.profiles.forProduct(currentProduct)
+      : await this.profiles.forProduct(Product.AUTO_HOME);
     const knownDatapoints = values
       .filter(
         (value) => value.value !== null && usableStatuses.has(value.status),
@@ -233,13 +231,19 @@ export class IntelligenceService {
         entityId: leadId,
       },
     });
-    const product = rawResult.product.type;
-    const completeness = await this.datapoints.completeness(leadId, product);
-    const nextAction = await this.strategy.select(
-      leadId,
-      product,
-      completeness,
-    );
+    const product = currentProduct ?? this.safeProviderProduct(rawResult);
+    const completeness = product
+      ? await this.datapoints.completeness(leadId, product)
+      : {
+          product: rawResult.product.type,
+          completeness: 0,
+          known: [],
+          missing: [],
+          conditionalRequired: [],
+        };
+    const nextAction = product
+      ? await this.strategy.select(leadId, product, completeness)
+      : this.strategy.productSelectionAction();
 
     return {
       intelligence: {
@@ -271,6 +275,14 @@ export class IntelligenceService {
       completeness,
       nextAction,
     };
+  }
+
+  private safeProviderProduct(
+    result: IntelligenceResult,
+  ): SelectedProduct | undefined {
+    if (result.product.confidence < 0.98) return undefined;
+    const product = result.product.type;
+    return this.profiles.isSelectable(product) ? product : undefined;
   }
 
   private validateResult(result: IntelligenceResult) {

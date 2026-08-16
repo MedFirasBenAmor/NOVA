@@ -58,15 +58,19 @@ export class MockIntelligenceProvider implements IntelligenceProvider {
       });
     };
 
+    const lockedProduct =
+      input.currentProduct && input.currentProduct !== 'COMMON'
+        ? input.currentProduct
+        : undefined;
     const isAuto =
-      input.currentProduct === 'AUTO' ||
+      lockedProduct === 'AUTO' ||
+      lockedProduct === 'AUTO_HOME' ||
       Boolean(input.entityContext?.vehicleId) ||
       /\b(rav4|vehicle|car|auto|drive|financ|lease|uber|turo|delivery|insurer|accident|claim)\b/i.test(
         message,
       );
-    const product: IntelligenceProductType = isAuto
-      ? 'AUTO'
-      : (input.currentProduct ?? 'COMMON');
+    const product: IntelligenceProductType =
+      lockedProduct ?? (isAuto ? 'AUTO' : 'COMMON');
     let intent: IntelligenceIntentType = 'GENERAL_INQUIRY';
     let intentConfidence = 0.65;
 

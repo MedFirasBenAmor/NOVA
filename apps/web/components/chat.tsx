@@ -9,7 +9,7 @@ import {
   ShieldCheck,
   Sparkles,
 } from 'lucide-react';
-import type { NextAction } from '@nova/shared-types';
+import type { NextAction, SelectableProduct } from '@nova/shared-types';
 import { api, type InteractionResponse } from '../lib/api';
 
 const SESSION_KEY = 'nova.leadId';
@@ -58,6 +58,24 @@ export function NextActionRenderer({
           This is a completeness milestone, not an eligibility or approval
           decision.
         </p>
+      </div>
+    );
+  if (action.type === 'SELECT_PRODUCT')
+    return (
+      <div className="rounded-2xl border border-[var(--border)] bg-white p-4 shadow-sm">
+        <p className="font-medium">Choose what you want to insure</p>
+        <div className="mt-4 grid gap-2 sm:grid-cols-3">
+          {action.options.map((option) => (
+            <button
+              key={option.value}
+              disabled={busy}
+              onClick={() => onAnswer(option.value, option.label)}
+              className="min-h-11 rounded-xl border border-[var(--border)] px-4 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
       </div>
     );
   if (action.type === 'WAIT_FOR_PROCESSING')
@@ -456,13 +474,12 @@ export default function ChatShell() {
     setBusy(true);
     setError(undefined);
     try {
-      const response = await api.answer(
-        leadId,
-        action.actionId,
-        value,
-        message,
-      );
-      setCompleteness(response.completeness.completeness);
+      const response =
+        action.type === 'SELECT_PRODUCT'
+          ? await api.selectProduct(leadId, value as SelectableProduct)
+          : await api.answer(leadId, action.actionId, value, message);
+      if ('completeness' in response)
+        setCompleteness(response.completeness.completeness);
       setAction(response.nextAction);
       setMessages((current) => [
         ...current,

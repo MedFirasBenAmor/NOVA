@@ -51,6 +51,7 @@ function setup(attempts: object[] = [], catalog: object[] = definitions) {
       prisma as never,
       { upsert: jest.fn() } as never,
       { addCustomerMessage: jest.fn() } as never,
+      { forProduct: jest.fn().mockResolvedValue(catalog) } as never,
     ),
     prisma,
   };
