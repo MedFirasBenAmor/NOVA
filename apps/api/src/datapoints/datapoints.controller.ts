@@ -45,6 +45,6 @@ export class DatapointsController {
     @Param('leadId', ParseUUIDPipe) leadId: string,
     @Query() query: CompletenessQueryDto,
   ) {
-    return this.datapoints.completeness(leadId, query.product);
+    return this.datapoints.completenessForSelected(leadId, query.product);
   }
 }

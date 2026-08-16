@@ -133,7 +133,7 @@ function setup(
       }),
     } as never,
     {
-      select: jest
+      currentAction: jest
         .fn()
         .mockResolvedValue({ type: 'COMPLETE', actionId: 'next' }),
     } as never,

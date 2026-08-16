@@ -207,6 +207,15 @@ export class DatapointsService {
     return resolveCompleteness(product, definitions, values);
   }
 
+  async completenessForSelected(leadId: string, product: SelectedProduct) {
+    const selectedProduct = await this.profiles.selectedForLead(leadId);
+    if (!selectedProduct)
+      throw new BadRequestException('Product must be selected first');
+    if (selectedProduct !== product)
+      throw new BadRequestException('Product does not match selected product');
+    return this.completeness(leadId, selectedProduct);
+  }
+
   private async folderForLead(
     db: Prisma.TransactionClient | PrismaService,
     leadId: string,

@@ -5,12 +5,14 @@ import {
   ParseUUIDPipe,
   Post,
   Res,
+  UseGuards,
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { ConfigService } from '@nestjs/config';
 import { CreateLeadDto } from './dto/create-lead.dto';
 import { LeadsService } from './leads.service';
 import { SelectProductDto } from './dto/select-product.dto';
+import { AnonymousSessionGuard } from '../auth/anonymous-session.guard';
 
 @Controller('leads')
 export class LeadsController {
@@ -42,6 +44,7 @@ export class LeadsController {
   }
 
   @Post(':leadId/product')
+  @UseGuards(AnonymousSessionGuard)
   selectProduct(
     @Param('leadId', ParseUUIDPipe) leadId: string,
     @Body() dto: SelectProductDto,

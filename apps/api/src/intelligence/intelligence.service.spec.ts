@@ -72,26 +72,28 @@ function serviceWith(
       conditionalRequired: [],
     }),
   };
+  const intake = {
+    currentAction: jest
+      .fn()
+      .mockResolvedValue({ type: 'COMPLETE', actionId: 'action' }),
+    productSelectionAction: jest.fn().mockReturnValue({
+      type: 'SELECT_PRODUCT',
+      actionId: 'select-product',
+      options: [],
+    }),
+  };
   return {
     service: new IntelligenceService(
       { analyze: jest.fn().mockResolvedValue(result) },
       prisma as never,
       datapoints as never,
       { addCustomerMessage: jest.fn().mockResolvedValue({}) } as never,
-      {
-        select: jest
-          .fn()
-          .mockResolvedValue({ type: 'COMPLETE', actionId: 'action' }),
-        productSelectionAction: jest.fn().mockReturnValue({
-          type: 'SELECT_PRODUCT',
-          actionId: 'select-product',
-          options: [],
-        }),
-      } as never,
+      intake as never,
       profiles as never,
     ),
     prisma,
     datapoints,
+    intake,
     profiles,
   };
 }

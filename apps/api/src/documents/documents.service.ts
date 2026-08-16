@@ -17,7 +17,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { DocumentQueueService } from './document-queue.service';
 import { DatapointsService } from '../datapoints/datapoints.service';
 import { RequirementProfileService } from '../datapoints/requirement-profile.service';
-import { CollectionStrategyService } from '../collection/collection-strategy.service';
+import { IntakeOrchestratorService } from '../collection/intake-orchestrator.service';
 import {
   DOCUMENT_STORAGE_PROVIDER,
   type DocumentStorageProvider,
@@ -43,7 +43,7 @@ export class DocumentsService {
     private readonly storage: DocumentStorageProvider,
     private readonly queue: DocumentQueueService,
     private readonly datapoints: DatapointsService,
-    private readonly strategy: CollectionStrategyService,
+    private readonly intake: IntakeOrchestratorService,
     private readonly profiles: RequirementProfileService,
   ) {}
 
@@ -209,13 +209,15 @@ export class DocumentsService {
     ) {
       return { documentId, status: document.status };
     }
-    const completeness = await this.datapoints.completeness(leadId, 'AUTO');
+    const product = await this.profiles.selectedForLead(leadId);
+    if (!product) throw new BadRequestException('Product must be selected');
+    const completeness = await this.datapoints.completeness(leadId, product);
     return {
       documentId,
       status: document.status,
       failureReason: document.failureReason,
       completeness,
-      nextAction: await this.strategy.select(leadId, 'AUTO', completeness),
+      nextAction: await this.intake.currentAction(leadId),
     };
   }
 

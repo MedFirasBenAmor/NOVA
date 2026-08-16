@@ -27,7 +27,7 @@ import { DatapointsService } from '../datapoints/datapoints.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateInteractionDto } from './dto/create-interaction.dto';
 import { ConversationsService } from '../conversations/conversations.service';
-import { CollectionStrategyService } from '../collection/collection-strategy.service';
+import { IntakeOrchestratorService } from '../collection/intake-orchestrator.service';
 import {
   RequirementProfileService,
   type SelectedProduct,
@@ -75,7 +75,7 @@ export class IntelligenceService {
     private readonly prisma: PrismaService,
     private readonly datapoints: DatapointsService,
     private readonly conversations: ConversationsService,
-    private readonly strategy: CollectionStrategyService,
+    private readonly intake: IntakeOrchestratorService,
     private readonly profiles: RequirementProfileService,
   ) {}
 
@@ -242,8 +242,8 @@ export class IntelligenceService {
           conditionalRequired: [],
         };
     const nextAction = product
-      ? await this.strategy.select(leadId, product, completeness)
-      : this.strategy.productSelectionAction();
+      ? await this.intake.currentAction(leadId)
+      : this.intake.productSelectionAction();
 
     return {
       intelligence: {

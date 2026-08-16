@@ -6,7 +6,7 @@ import {
   RequirementProfileService,
   type SelectedProduct,
 } from '../datapoints/requirement-profile.service';
-import { CollectionStrategyService } from '../collection/collection-strategy.service';
+import { IntakeOrchestratorService } from '../collection/intake-orchestrator.service';
 
 @Injectable()
 export class LeadsService {
@@ -14,7 +14,7 @@ export class LeadsService {
     private readonly prisma: PrismaService,
     private readonly sessions: AnonymousSessionService,
     private readonly profiles: RequirementProfileService,
-    private readonly strategy: CollectionStrategyService,
+    private readonly intake: IntakeOrchestratorService,
   ) {}
 
   async create(dto: CreateLeadDto) {
@@ -35,11 +35,6 @@ export class LeadsService {
   }
 
   async selectProduct(leadId: string, product: SelectedProduct) {
-    const selectedProduct = await this.profiles.selectForLead(leadId, product);
-    return {
-      selectedProduct,
-      profile: await this.profiles.forProduct(selectedProduct),
-      nextAction: await this.strategy.selectForLead(leadId),
-    };
+    return this.intake.selectProduct(leadId, product);
   }
 }

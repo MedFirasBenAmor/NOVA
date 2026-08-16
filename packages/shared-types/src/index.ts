@@ -2,6 +2,7 @@ export type HealthResponse = { status: 'ok' };
 
 export type DatapointProduct = 'COMMON' | 'AUTO' | 'HOME' | 'AUTO_HOME';
 export type SelectableProduct = 'AUTO' | 'HOME' | 'AUTO_HOME';
+export type ProductDomain = 'AUTO' | 'HOME';
 export type MissingReason = 'REQUIRED' | 'CONDITIONAL';
 
 export type CompletenessItem = {
@@ -167,5 +168,19 @@ export type NextAction =
       type: 'SELECT_PRODUCT';
       actionId: string;
       options: Array<{ value: SelectableProduct; label: string }>;
+    }
+  | {
+      type: 'ASK_CURRENT_INSURANCE';
+      actionId: string;
+      productDomain: ProductDomain;
+      question: string;
+      input: { type: 'YES_NO' };
+    }
+  | {
+      type: 'ASK_POLICY_DOCUMENT';
+      actionId: string;
+      productDomain: ProductDomain;
+      question: string;
+      input: { type: 'YES_NO' };
     }
   | { type: 'COMPLETE'; actionId: string };

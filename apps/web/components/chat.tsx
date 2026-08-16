@@ -90,6 +90,31 @@ export function NextActionRenderer({
       </div>
     );
   if (
+    action.type === 'ASK_CURRENT_INSURANCE' ||
+    action.type === 'ASK_POLICY_DOCUMENT'
+  )
+    return (
+      <div className="rounded-2xl border border-[var(--border)] bg-white p-4 shadow-sm">
+        <p className="font-medium">{action.question}</p>
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          <button
+            disabled={busy}
+            onClick={() => onAnswer(true, 'Yes')}
+            className="min-h-12 rounded-xl border border-[var(--border)] px-4 text-left text-sm font-medium hover:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
+          >
+            Yes
+          </button>
+          <button
+            disabled={busy}
+            onClick={() => onAnswer(false, 'No')}
+            className="min-h-12 rounded-xl border border-[var(--border)] px-4 text-left text-sm font-medium hover:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
+          >
+            No
+          </button>
+        </div>
+      </div>
+    );
+  if (
     action.type === 'SUGGEST_FULL_DOCUMENT' ||
     action.type === 'SUGGEST_TARGETED_CAPTURE'
   ) {

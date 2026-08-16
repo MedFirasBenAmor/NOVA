@@ -10,11 +10,15 @@ import { AnonymousSessionGuard } from '../auth/anonymous-session.guard';
 import { CollectionStrategyService } from './collection-strategy.service';
 import { RespondCollectionActionDto } from './dto/respond-collection-action.dto';
 import { AnswerDatapointDto } from './dto/answer-datapoint.dto';
+import { IntakeOrchestratorService } from './intake-orchestrator.service';
 
 @Controller('leads/:leadId/collection-actions')
 @UseGuards(AnonymousSessionGuard)
 export class CollectionController {
-  constructor(private readonly strategy: CollectionStrategyService) {}
+  constructor(
+    private readonly strategy: CollectionStrategyService,
+    private readonly intake: IntakeOrchestratorService,
+  ) {}
 
   @Post(':actionId/respond')
   respond(
@@ -31,6 +35,12 @@ export class CollectionController {
     @Param('actionId', ParseUUIDPipe) actionId: string,
     @Body() dto: AnswerDatapointDto,
   ) {
-    return this.strategy.answer(leadId, actionId, dto.value, dto.message);
+    return this.intake
+      .isIntakeAction(leadId, actionId)
+      .then((isIntake) =>
+        isIntake
+          ? this.intake.answerIntake(leadId, actionId, dto.value, dto.message)
+          : this.strategy.answer(leadId, actionId, dto.value, dto.message),
+      );
   }
 }
