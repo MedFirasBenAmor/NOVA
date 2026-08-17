@@ -19,11 +19,14 @@ import {
   RequirementProfileService,
   type SelectedProduct,
 } from './requirement-profile.service';
+import { EntityLifecycleService } from './entity-lifecycle.service';
 
 const scopedEntities = new Set<EntityType>([
   EntityType.VEHICLE,
   EntityType.DRIVER,
+  EntityType.PROPERTY,
   EntityType.CLAIM,
+  EntityType.CO_APPLICANT,
 ]);
 
 @Injectable()
@@ -31,6 +34,7 @@ export class DatapointsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly profiles: RequirementProfileService,
+    private readonly entities: EntityLifecycleService,
   ) {}
 
   definitions(product: Product) {
@@ -72,9 +76,14 @@ export class DatapointsService {
       if (!definition)
         throw new BadRequestException(`Unknown datapoint key: ${dto.key}`);
 
-      this.validateInput(definition, dto);
       const folder = await this.folderForLead(tx, leadId);
+      const selectedProduct = await this.profiles.selectedForLead(leadId);
+      if (!selectedProduct)
+        throw new BadRequestException('Product must be selected first');
+      await this.validateProfileDefinition(selectedProduct, definition);
+      this.validateInput(definition, dto);
       const entityType = dto.entityType ?? definition.entityType;
+      await this.validateEntityScope(leadId, definition, dto.entityId);
       const scopeKey = `${entityType}:${dto.entityId ?? 'ROOT'}`;
       const status = dto.status ?? this.defaultStatus(dto.collectionMethod);
       const now = new Date();
@@ -197,14 +206,15 @@ export class DatapointsService {
 
   async completeness(leadId: string, product: SelectedProduct) {
     const folder = await this.folderForLead(this.prisma, leadId);
-    const [definitions, values] = await Promise.all([
+    const [definitions, values, primaryEntityIds] = await Promise.all([
       this.profiles.forProduct(product),
       this.prisma.datapointValue.findMany({
         where: { customerFolderId: folder.id },
         include: { definition: { select: { key: true } } },
       }),
+      this.entities.primaryEntityIdsForProduct(leadId, product),
     ]);
-    return resolveCompleteness(product, definitions, values);
+    return resolveCompleteness(product, definitions, values, primaryEntityIds);
   }
 
   async completenessForSelected(leadId: string, product: SelectedProduct) {
@@ -230,6 +240,37 @@ export class DatapointsService {
       update: {},
       create: { leadId },
     });
+  }
+
+  private async validateProfileDefinition(
+    product: SelectedProduct,
+    definition: DatapointDefinition,
+  ) {
+    const definitions = await this.profiles.forProduct(product);
+    if (!definitions.some((item) => item.id === definition.id)) {
+      throw new BadRequestException(
+        'Datapoint is not valid for selected product',
+      );
+    }
+  }
+
+  private async validateEntityScope(
+    leadId: string,
+    definition: DatapointDefinition,
+    entityId: string | undefined,
+  ) {
+    if (!scopedEntities.has(definition.entityType)) {
+      if (entityId)
+        throw new BadRequestException(`${definition.key} is root scoped`);
+      return;
+    }
+    if (!entityId)
+      throw new BadRequestException(`${definition.key} requires an entityId`);
+    await this.entities.assertOwnedEntityType(
+      leadId,
+      entityId,
+      definition.entityType,
+    );
   }
 
   validateInput(definition: DatapointDefinition, dto: UpsertDatapointDto) {

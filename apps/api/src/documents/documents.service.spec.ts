@@ -28,6 +28,7 @@ function setup(
     attemptLeadId: string;
     storeFails: boolean;
     dbFails: boolean;
+    entityFails: boolean;
   }> = {},
 ) {
   let completedStatus: CollectionAttemptStatus | undefined;
@@ -118,6 +119,16 @@ function setup(
   const config = {
     get: jest.fn((_key: string, fallback: number) => fallback),
   };
+  const entities = {
+    ensurePrimaryEntity: jest.fn().mockResolvedValue({
+      id: '00000000-0000-4000-8000-000000000077',
+    }),
+    assertOwnedEntityType: overrides.entityFails
+      ? jest
+          .fn()
+          .mockRejectedValue(new BadRequestException('Entity must be DRIVER'))
+      : jest.fn().mockResolvedValue({}),
+  };
   const service = new DocumentsService(
     prisma as never,
     config as never,
@@ -138,6 +149,7 @@ function setup(
         .mockResolvedValue({ type: 'COMPLETE', actionId: 'next' }),
     } as never,
     { selectedForLead: jest.fn().mockResolvedValue(Product.AUTO) } as never,
+    entities as never,
   );
   return {
     service,
@@ -145,6 +157,7 @@ function setup(
     storage,
     tx,
     config,
+    entities,
     completedStatus: () => completedStatus,
     createdEntityId: () => createdEntityId,
   };
@@ -171,7 +184,7 @@ describe('DocumentsService', () => {
     });
     expect(JSON.stringify(result)).not.toContain('storageKey');
     expect(completedStatus()).toBe(CollectionAttemptStatus.COMPLETED);
-    expect(createdEntityId()).toEqual(expect.any(String));
+    expect(createdEntityId()).toBe('00000000-0000-4000-8000-000000000077');
   });
 
   it('preserves targeted capture separately', async () => {
@@ -215,6 +228,24 @@ describe('DocumentsService', () => {
     await expect(
       smallLimit.service.upload(leadId, file, { collectionActionId: actionId }),
     ).rejects.toThrow('size limit');
+  });
+
+  it('rejects a document action with the wrong entity type', async () => {
+    const wrong = setup({ entityFails: true });
+    wrong.prisma.collectionAttempt.findFirst.mockResolvedValueOnce({
+      id: actionId,
+      leadId,
+      entityType: EntityType.DRIVER,
+      entityId: '00000000-0000-4000-8000-000000000099',
+      documentType: 'DRIVER_LICENSE',
+      product: Product.AUTO,
+      status: CollectionAttemptStatus.ACCEPTED,
+      actionType: CollectionActionType.SUGGEST_FULL_DOCUMENT,
+    });
+    await expect(
+      wrong.service.upload(leadId, file, { collectionActionId: actionId }),
+    ).rejects.toThrow(BadRequestException);
+    expect(wrong.storage.store).not.toHaveBeenCalled();
   });
 
   it('deletes stored bytes if database persistence fails while leaving acceptance untouched', async () => {

@@ -10,13 +10,14 @@ import {
   DocumentCollectionMode,
   DocumentStatus,
   DocumentType,
+  EntityType,
 } from '@prisma/client';
 import { ConfigService } from '@nestjs/config';
-import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { DocumentQueueService } from './document-queue.service';
 import { DatapointsService } from '../datapoints/datapoints.service';
 import { RequirementProfileService } from '../datapoints/requirement-profile.service';
+import { EntityLifecycleService } from '../datapoints/entity-lifecycle.service';
 import { IntakeOrchestratorService } from '../collection/intake-orchestrator.service';
 import {
   DOCUMENT_STORAGE_PROVIDER,
@@ -45,6 +46,7 @@ export class DocumentsService {
     private readonly datapoints: DatapointsService,
     private readonly intake: IntakeOrchestratorService,
     private readonly profiles: RequirementProfileService,
+    private readonly entities: EntityLifecycleService,
   ) {}
 
   async upload(
@@ -78,9 +80,11 @@ export class DocumentsService {
         ? DocumentCollectionMode.FULL_DOCUMENT
         : DocumentCollectionMode.TARGETED_CAPTURE;
     const documentType = this.documentType(attempt.documentType);
-    const entityId =
-      attempt.entityId ??
-      (documentType === DocumentType.DRIVER_LICENSE ? randomUUID() : null);
+    const entityId = await this.documentEntityId(
+      leadId,
+      documentType,
+      attempt.entityId,
+    );
     await this.audit('DOCUMENT_UPLOAD_STARTED', leadId);
     let stored: { storageKey: string; provider: 'LOCAL' } | undefined;
     try {
@@ -245,6 +249,24 @@ export class DocumentsService {
       throw new BadRequestException(
         'Document content does not match its MIME type',
       );
+  }
+
+  private async documentEntityId(
+    leadId: string,
+    documentType: DocumentType,
+    entityId: string | null,
+  ) {
+    if (documentType !== DocumentType.DRIVER_LICENSE) return entityId;
+    if (entityId) {
+      await this.entities.assertOwnedEntityType(
+        leadId,
+        entityId,
+        EntityType.DRIVER,
+      );
+      return entityId;
+    }
+    return (await this.entities.ensurePrimaryEntity(leadId, EntityType.DRIVER))
+      .id;
   }
 
   private documentType(value: string | null) {

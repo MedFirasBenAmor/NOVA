@@ -3,6 +3,7 @@ import {
   CollectionMethod,
   DocumentStatus,
   DocumentType,
+  EntityType,
   SourceType,
 } from '@prisma/client';
 import { DatapointsService } from '../datapoints/datapoints.service';
@@ -12,6 +13,7 @@ import {
   type DocumentStorageProvider,
 } from './document-storage.provider';
 import { DriverLicenseExtractor } from './driver-license.extractor';
+import { EntityLifecycleService } from '../datapoints/entity-lifecycle.service';
 import { OCR_PROVIDER, type OcrProvider } from './ocr/ocr.provider';
 
 @Injectable()
@@ -23,6 +25,7 @@ export class DocumentProcessorService {
     @Inject(DOCUMENT_STORAGE_PROVIDER)
     private readonly storage: DocumentStorageProvider,
     @Inject(OCR_PROVIDER) private readonly ocr: OcrProvider,
+    private readonly entities: EntityLifecycleService,
   ) {}
 
   async process(documentId: string) {
@@ -50,6 +53,11 @@ export class DocumentProcessorService {
       if (document.documentType !== DocumentType.DRIVER_LICENSE)
         throw new Error('UNSUPPORTED_DOCUMENT_TYPE');
       if (!document.entityId) throw new Error('MISSING_DRIVER_ENTITY');
+      await this.entities.assertOwnedEntityType(
+        document.leadId,
+        document.entityId,
+        EntityType.DRIVER,
+      );
       const buffer = await this.storage.read(document.storageKey);
       const ocr = await this.ocr.recognize({
         buffer,

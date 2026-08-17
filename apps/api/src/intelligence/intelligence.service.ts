@@ -22,12 +22,15 @@ import type {
   IntelligenceResult,
 } from '@nova/shared-types';
 import { randomUUID } from 'node:crypto';
-import { isUUID } from 'class-validator';
 import { DatapointsService } from '../datapoints/datapoints.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateInteractionDto } from './dto/create-interaction.dto';
 import { ConversationsService } from '../conversations/conversations.service';
 import { IntakeOrchestratorService } from '../collection/intake-orchestrator.service';
+import {
+  EntityLifecycleService,
+  type PrimaryEntityMap,
+} from '../datapoints/entity-lifecycle.service';
 import {
   RequirementProfileService,
   type SelectedProduct,
@@ -76,6 +79,7 @@ export class IntelligenceService {
     private readonly datapoints: DatapointsService,
     private readonly conversations: ConversationsService,
     private readonly intake: IntakeOrchestratorService,
+    private readonly entities: EntityLifecycleService,
     private readonly profiles: RequirementProfileService,
   ) {}
 
@@ -126,23 +130,12 @@ export class IntelligenceService {
     const definitionByKey = new Map(
       definitions.map((definition) => [definition.key, definition]),
     );
-    const scopeIds = {
-      VEHICLE:
-        dto.entityContext?.vehicleId ??
-        values.find((value) => value.entityType === EntityType.VEHICLE)
-          ?.entityId ??
-        randomUUID(),
-      DRIVER:
-        dto.entityContext?.driverId ??
-        values.find((value) => value.entityType === EntityType.DRIVER)
-          ?.entityId ??
-        randomUUID(),
-      CLAIM:
-        dto.entityContext?.claimId ??
-        values.find((value) => value.entityType === EntityType.CLAIM)
-          ?.entityId ??
-        randomUUID(),
-    };
+    const primaryEntityIds = currentProduct
+      ? await this.entities.ensurePrimaryEntitiesForProduct(
+          leadId,
+          currentProduct,
+        )
+      : {};
     const validCandidates: IntelligenceCandidateDatapoint[] = [];
     const rejections: Array<{ key: string; reason: string }> = [];
     const conflicts: Array<{ key: string; entityId?: string }> = [];
@@ -155,7 +148,11 @@ export class IntelligenceService {
         rejections.push({ key: rawCandidate.key, reason: 'UNKNOWN_KEY' });
         continue;
       }
-      const candidate = this.withScope(rawCandidate, definition, scopeIds);
+      const candidate = this.withScope(
+        rawCandidate,
+        definition,
+        primaryEntityIds,
+      );
       try {
         this.validateCandidate(candidate, definition);
       } catch (error) {
@@ -321,9 +318,6 @@ export class IntelligenceService {
     if (candidate.entityType !== definition.entityType) {
       throw new BadRequestException('INVALID_ENTITY_TYPE');
     }
-    if (candidate.entityId && !isUUID(candidate.entityId)) {
-      throw new BadRequestException('INVALID_ENTITY_ID');
-    }
     this.datapoints.validateInput(definition, {
       key: candidate.key,
       value: candidate.value,
@@ -338,17 +332,13 @@ export class IntelligenceService {
   private withScope(
     candidate: IntelligenceCandidateDatapoint,
     definition: DatapointDefinition,
-    scopeIds: Record<'VEHICLE' | 'DRIVER' | 'CLAIM', string>,
+    primaryEntityIds: PrimaryEntityMap,
   ): IntelligenceCandidateDatapoint {
-    if (
-      definition.entityType === EntityType.VEHICLE ||
-      definition.entityType === EntityType.DRIVER ||
-      definition.entityType === EntityType.CLAIM
-    ) {
+    if (this.entities.isPrimaryScopedType(definition.entityType)) {
       return {
         ...candidate,
         entityType: definition.entityType,
-        entityId: candidate.entityId ?? scopeIds[definition.entityType],
+        entityId: primaryEntityIds[definition.entityType],
       };
     }
     return {

@@ -10,7 +10,6 @@ import type { CompletenessResponse, NextAction } from '@nova/shared-types';
 import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { DatapointsService } from '../datapoints/datapoints.service';
-import { resolveCompleteness } from '../datapoints/completeness.resolver';
 import {
   RequirementProfileService,
   type SelectedProduct,
@@ -245,17 +244,9 @@ export class CollectionStrategyService {
       data: { status: decision, resolvedAt: new Date() },
     });
     await this.audit(`COLLECTION_ACTION_${decision}`, leadId);
-    const completeness = await this.prisma.datapointValue.findMany({
-      where: { customerFolder: { leadId } },
-      include: { definition: true },
-    });
-    const product = attempt.product;
-    const defs = await this.profiles.forProduct(product as SelectedProduct);
-    const nextAction = await this.select(
-      leadId,
-      product as SelectedProduct,
-      resolveCompleteness(product, defs, completeness),
-    );
+    const product = attempt.product as SelectedProduct;
+    const completeness = await this.datapoints.completeness(leadId, product);
+    const nextAction = await this.select(leadId, product, completeness);
     return {
       nextAction,
       metrics: {
@@ -307,17 +298,9 @@ export class CollectionStrategyService {
         resolvedAt: new Date(),
       },
     });
-    const [definitions, values] = await Promise.all([
-      this.profiles.forProduct(attempt.product as SelectedProduct),
-      this.prisma.datapointValue.findMany({
-        where: { customerFolder: { leadId } },
-        include: { definition: true },
-      }),
-    ]);
-    const completeness = resolveCompleteness(
-      attempt.product,
-      definitions,
-      values,
+    const completeness = await this.datapoints.completeness(
+      leadId,
+      attempt.product as SelectedProduct,
     );
     return {
       datapoint,

@@ -51,11 +51,13 @@ describe('DocumentProcessorService', () => {
         ],
       }),
     };
+    const entities = { assertOwnedEntityType: jest.fn().mockResolvedValue({}) };
     const service = new DocumentProcessorService(
       prisma as never,
       datapoints as never,
       storage,
       ocr,
+      entities as never,
     );
     await service.process(document.id);
     expect(datapoints.upsertCandidate).toHaveBeenCalledTimes(3);
@@ -66,6 +68,12 @@ describe('DocumentProcessorService', () => {
     expect(firstCall[0]).toBe(document.leadId);
     expect(firstCall[1].sourceType).toBe('FULL_DOCUMENT');
     expect(firstCall[1].sourceReferenceId).toBe(document.id);
+    expect(firstCall[1].entityId).toBe(document.entityId);
+    expect(entities.assertOwnedEntityType).toHaveBeenCalledWith(
+      document.leadId,
+      document.entityId,
+      'DRIVER',
+    );
     expect((firstCall[1].metadata as Record<string, unknown>).documentId).toBe(
       document.id,
     );
@@ -78,6 +86,39 @@ describe('DocumentProcessorService', () => {
     document.status = DocumentStatus.PROCESSED;
     await service.process(document.id);
     expect(datapoints.upsertCandidate).toHaveBeenCalledTimes(3);
+  });
+
+  it('rejects documents whose entity is not the owned driver', async () => {
+    const document = {
+      id: '00000000-0000-4000-8000-000000000001',
+      leadId: 'lead',
+      entityId: '00000000-0000-4000-8000-000000000099',
+      documentType: DocumentType.DRIVER_LICENSE,
+      collectionMode: DocumentCollectionMode.FULL_DOCUMENT,
+      status: DocumentStatus.UPLOADED,
+      storageKey: 'private.jpg',
+      mimeType: 'image/jpeg',
+    };
+    const update = jest.fn().mockResolvedValue({});
+    const service = new DocumentProcessorService(
+      {
+        document: { findUnique: jest.fn().mockResolvedValue(document), update },
+        auditEvent: { create: jest.fn().mockResolvedValue({}) },
+      } as never,
+      {} as never,
+      {} as never,
+      { name: 'mock', recognize: jest.fn() },
+      {
+        assertOwnedEntityType: jest
+          .fn()
+          .mockRejectedValue(new Error('wrong type')),
+      } as never,
+    );
+    await expect(service.process(document.id)).rejects.toThrow('wrong type');
+    const failureCall = update.mock.calls.at(-1) as [
+      { data: Record<string, unknown> },
+    ];
+    expect(failureCall[0].data.status).toBe('FAILED');
   });
 
   it('marks failures safely', async () => {
@@ -100,6 +141,7 @@ describe('DocumentProcessorService', () => {
       {} as never,
       {} as never,
       { name: 'mock', recognize: jest.fn() },
+      { assertOwnedEntityType: jest.fn().mockResolvedValue({}) } as never,
     );
     await expect(service.process(document.id)).rejects.toThrow(
       'MISSING_DRIVER_ENTITY',

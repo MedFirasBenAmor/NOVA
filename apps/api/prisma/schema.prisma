@@ -136,10 +136,25 @@ model CustomerFolder {
   lead            Lead?            @relation(fields: [leadId], references: [id], onDelete: Cascade)
   customerId      String?          @unique @db.Uuid
   customer        Customer?        @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  entities        DossierEntity[]
   datapointValues DatapointValue[]
   documents       Document[]
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
+}
+
+model DossierEntity {
+  id               String         @id @default(uuid()) @db.Uuid
+  customerFolderId String         @db.Uuid
+  customerFolder   CustomerFolder @relation(fields: [customerFolderId], references: [id], onDelete: Cascade)
+  entityType       EntityType
+  role             EntityRole
+  ordinal          Int
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@unique([customerFolderId, entityType, role, ordinal])
+  @@index([customerFolderId, entityType, role])
 }
 
 enum DocumentType {
@@ -287,6 +302,12 @@ enum EntityType {
   CLAIM
   CO_APPLICANT
   REQUEST
+}
+
+enum EntityRole {
+  PRIMARY
+  ADDITIONAL
+  REPEATABLE
 }
 
 model DatapointDefinition {

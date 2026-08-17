@@ -46,8 +46,14 @@ function isUsable(value: Value | undefined) {
   );
 }
 
-function scopesFor(definition: Definition, values: Value[]) {
+function scopesFor(
+  definition: Definition,
+  values: Value[],
+  primaryEntityIds: Partial<Record<EntityType, string>>,
+) {
   if (!scopedEntities.has(definition.entityType)) return [undefined];
+  const primaryEntityId = primaryEntityIds[definition.entityType];
+  if (primaryEntityId) return [primaryEntityId];
   const ids = [
     ...new Set(
       values
@@ -85,6 +91,7 @@ export function resolveCompleteness(
   product: Product,
   definitions: Definition[],
   values: Value[],
+  primaryEntityIds: Partial<Record<EntityType, string>> = {},
 ): CompletenessResponse {
   const known = values.filter(isUsable).map((value) => ({
     key: value.definition.key,
@@ -97,7 +104,7 @@ export function resolveCompleteness(
   let knownRequiredCount = 0;
 
   for (const definition of definitions) {
-    for (const entityId of scopesFor(definition, values)) {
+    for (const entityId of scopesFor(definition, values, primaryEntityIds)) {
       let reason: 'REQUIRED' | 'CONDITIONAL' | undefined;
       let triggeredBy: string | undefined;
 

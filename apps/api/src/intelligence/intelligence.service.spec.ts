@@ -46,7 +46,11 @@ function serviceWith(
       createMany: jest.fn().mockResolvedValue({ count: 1 }),
     },
   };
-  const prismaForValidation = new DatapointsService({} as never, {} as never);
+  const prismaForValidation = new DatapointsService(
+    {} as never,
+    {} as never,
+    {} as never,
+  );
   const profiles = {
     selectedForLead: jest.fn().mockResolvedValue(selectedProduct),
     forProduct: jest.fn().mockResolvedValue(definitions),
@@ -82,6 +86,18 @@ function serviceWith(
       options: [],
     }),
   };
+  const entities = {
+    ensurePrimaryEntitiesForProduct: jest.fn().mockResolvedValue({
+      VEHICLE: vehicleId,
+      DRIVER: '00000000-0000-4000-8000-000000000077',
+      PROPERTY: '00000000-0000-4000-8000-000000000088',
+    }),
+    isPrimaryScopedType: jest.fn((entityType: EntityType) =>
+      [EntityType.VEHICLE, EntityType.DRIVER, EntityType.PROPERTY].includes(
+        entityType as never,
+      ),
+    ),
+  };
   return {
     service: new IntelligenceService(
       { analyze: jest.fn().mockResolvedValue(result) },
@@ -89,11 +105,13 @@ function serviceWith(
       datapoints as never,
       { addCustomerMessage: jest.fn().mockResolvedValue({}) } as never,
       intake as never,
+      entities as never,
       profiles as never,
     ),
     prisma,
     datapoints,
     intake,
+    entities,
     profiles,
   };
 }
@@ -280,4 +298,59 @@ describe('IntelligenceService', () => {
     ).rejects.toThrow(BadGatewayException);
     expect(datapoints.upsertCandidate).not.toHaveBeenCalled();
   });
+});
+
+describe('IntelligenceService entity normalization', () => {
+  const typedDefinition = (
+    key: string,
+    entityType: EntityType,
+    dataType = DataType.STRING,
+  ) => ({
+    ...definition(key, dataType),
+    entityType,
+  });
+
+  it.each([
+    ['vehicle.model', EntityType.VEHICLE, vehicleId],
+    [
+      'driver.first_name',
+      EntityType.DRIVER,
+      '00000000-0000-4000-8000-000000000077',
+    ],
+    [
+      'property.address.street',
+      EntityType.PROPERTY,
+      '00000000-0000-4000-8000-000000000088',
+    ],
+  ])(
+    'normalizes %s to the canonical primary entity',
+    async (key, entityType, canonicalId) => {
+      const definitions = [typedDefinition(key, entityType)];
+      const { service, datapoints } = serviceWith(
+        {
+          intent: { type: 'INSURANCE_SHOPPING', confidence: 0.9 },
+          product: { type: 'AUTO_HOME', confidence: 0.99 },
+          events: [],
+          candidateDatapoints: [
+            {
+              key,
+              value: 'value',
+              entityType,
+              entityId: '00000000-0000-4000-8000-000000009999',
+              method: 'EXTRACTED',
+              confidence: 0.99,
+            },
+          ],
+        },
+        definitions,
+        Product.AUTO_HOME,
+      );
+
+      await service.analyze(leadId, { message: 'synthetic message' });
+      expect(datapoints.upsertCandidate).toHaveBeenCalledWith(
+        leadId,
+        expect.objectContaining({ key, entityType, entityId: canonicalId }),
+      );
+    },
+  );
 });

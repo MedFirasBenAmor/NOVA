@@ -334,3 +334,27 @@ describe('resolveCompleteness', () => {
     expect(result.missing).toHaveLength(0);
   });
 });
+
+it('uses canonical primary entity ids for scoped primary requirements', () => {
+  const year = definition(
+    'vehicle.year',
+    EntityType.VEHICLE,
+    RequirementType.REQUIRED,
+  );
+  const canonicalVehicle = id(70);
+  const randomVehicle = id(71);
+  const wrongScopedValue = value(
+    year.id,
+    year.key,
+    EntityType.VEHICLE,
+    2024,
+    randomVehicle,
+  );
+  const result = resolveCompleteness(Product.AUTO, [year], [wrongScopedValue], {
+    [EntityType.VEHICLE]: canonicalVehicle,
+  });
+  expect(result.completeness).toBe(0);
+  expect(result.missing).toEqual([
+    expect.objectContaining({ key: year.key, entityId: canonicalVehicle }),
+  ]);
+});
