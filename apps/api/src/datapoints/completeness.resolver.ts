@@ -8,6 +8,7 @@ import {
   type Prisma,
 } from '@prisma/client';
 import type { CompletenessResponse } from '@nova/shared-types';
+import { additionalDriverRequiredKeys } from './entity-lifecycle.service';
 
 type Definition = Pick<
   DatapointDefinition,
@@ -49,11 +50,21 @@ function isUsable(value: Value | undefined) {
 function scopesFor(
   definition: Definition,
   values: Value[],
-  primaryEntityIds: Partial<Record<EntityType, string>>,
+  scopedEntityIds: Partial<Record<EntityType, string[] | string>>,
 ) {
   if (!scopedEntities.has(definition.entityType)) return [undefined];
-  const primaryEntityId = primaryEntityIds[definition.entityType];
-  if (primaryEntityId) return [primaryEntityId];
+  const configuredIds = scopedEntityIds[definition.entityType];
+  const canonicalIds =
+    typeof configuredIds === 'string' ? [configuredIds] : configuredIds;
+  if (canonicalIds?.length) {
+    if (
+      definition.entityType === EntityType.DRIVER &&
+      !additionalDriverRequiredKeys.has(definition.key)
+    ) {
+      return [canonicalIds[0]];
+    }
+    return canonicalIds;
+  }
   const ids = [
     ...new Set(
       values
@@ -79,7 +90,9 @@ function conditionMatches(
       (value) =>
         value.entityType === definition.entityType &&
         value.entityId === entityId,
-    ) ?? candidates.find((value) => value.entityId === null);
+    ) ??
+    candidates.find((value) => value.entityId === null) ??
+    candidates[0];
   if (!observed) return false;
   if (condition.operator === 'EQ') return observed.value === condition.value;
   return (
@@ -91,7 +104,7 @@ export function resolveCompleteness(
   product: Product,
   definitions: Definition[],
   values: Value[],
-  primaryEntityIds: Partial<Record<EntityType, string>> = {},
+  scopedEntityIds: Partial<Record<EntityType, string[] | string>> = {},
 ): CompletenessResponse {
   const known = values.filter(isUsable).map((value) => ({
     key: value.definition.key,
@@ -104,7 +117,7 @@ export function resolveCompleteness(
   let knownRequiredCount = 0;
 
   for (const definition of definitions) {
-    for (const entityId of scopesFor(definition, values, primaryEntityIds)) {
+    for (const entityId of scopesFor(definition, values, scopedEntityIds)) {
       let reason: 'REQUIRED' | 'CONDITIONAL' | undefined;
       let triggeredBy: string | undefined;
 

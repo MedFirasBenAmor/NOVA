@@ -52,6 +52,7 @@ function setup(attempts: object[] = [], catalog: object[] = definitions) {
       { upsert: jest.fn() } as never,
       { addCustomerMessage: jest.fn() } as never,
       { forProduct: jest.fn().mockResolvedValue(catalog) } as never,
+      { openLoopsForLead: jest.fn().mockResolvedValue([]) } as never,
     ),
     prisma,
   };

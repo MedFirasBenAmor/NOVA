@@ -97,6 +97,7 @@ enum CollectionActionType {
   SUGGEST_FULL_DOCUMENT
   SUGGEST_TARGETED_CAPTURE
   ASK_DATAPOINT
+  ASK_ADD_ANOTHER_ENTITY
   ASK_GROUPED_DATAPOINTS
   CONFIRM_DATAPOINT
   COMPLETE
@@ -137,6 +138,7 @@ model CustomerFolder {
   customerId      String?          @unique @db.Uuid
   customer        Customer?        @relation(fields: [customerId], references: [id], onDelete: Cascade)
   entities        DossierEntity[]
+  collectionLoops CollectionLoop[]
   datapointValues DatapointValue[]
   documents       Document[]
   createdAt       DateTime         @default(now())
@@ -149,12 +151,33 @@ model DossierEntity {
   customerFolder   CustomerFolder @relation(fields: [customerFolderId], references: [id], onDelete: Cascade)
   entityType       EntityType
   role             EntityRole
+  domain           EntityDomain   @default(NONE)
   ordinal          Int
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
 
-  @@unique([customerFolderId, entityType, role, ordinal])
-  @@index([customerFolderId, entityType, role])
+  @@unique([customerFolderId, entityType, role, domain, ordinal])
+  @@index([customerFolderId, entityType, role, domain])
+}
+
+model CollectionLoop {
+  id                 String               @id @default(uuid()) @db.Uuid
+  customerFolderId   String               @db.Uuid
+  customerFolder     CustomerFolder       @relation(fields: [customerFolderId], references: [id], onDelete: Cascade)
+  entityType         EntityType
+  role               EntityRole
+  domain             EntityDomain         @default(NONE)
+  status             CollectionLoopStatus @default(COLLECTING)
+  currentOrdinal     Int
+  triggerKey         String?
+  createdByAttemptId String?              @unique @db.Uuid
+  closedByAttemptId  String?              @unique @db.Uuid
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  closedAt           DateTime?
+
+  @@unique([customerFolderId, entityType, role, domain])
+  @@index([customerFolderId, status])
 }
 
 enum DocumentType {
@@ -308,6 +331,17 @@ enum EntityRole {
   PRIMARY
   ADDITIONAL
   REPEATABLE
+}
+
+enum EntityDomain {
+  NONE
+  AUTO
+  HOME
+}
+
+enum CollectionLoopStatus {
+  COLLECTING
+  CLOSED
 }
 
 model DatapointDefinition {

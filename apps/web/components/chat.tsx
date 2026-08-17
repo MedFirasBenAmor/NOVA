@@ -91,7 +91,8 @@ export function NextActionRenderer({
     );
   if (
     action.type === 'ASK_CURRENT_INSURANCE' ||
-    action.type === 'ASK_POLICY_DOCUMENT'
+    action.type === 'ASK_POLICY_DOCUMENT' ||
+    action.type === 'ASK_ADD_ANOTHER_ENTITY'
   )
     return (
       <div className="rounded-2xl border border-[var(--border)] bg-white p-4 shadow-sm">

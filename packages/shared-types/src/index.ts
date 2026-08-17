@@ -183,4 +183,15 @@ export type NextAction =
       question: string;
       input: { type: 'YES_NO' };
     }
+  | {
+      type: 'ASK_ADD_ANOTHER_ENTITY';
+      actionId: string;
+      entityType: IntelligenceEntityType;
+      domain?: ProductDomain;
+      loopId: string;
+      ordinal: number;
+      label?: string;
+      question: string;
+      input: { type: 'YES_NO' };
+    }
   | { type: 'COMPLETE'; actionId: string };

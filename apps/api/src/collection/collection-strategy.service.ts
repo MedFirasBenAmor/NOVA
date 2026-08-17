@@ -3,8 +3,10 @@ import {
   CollectionActionType,
   CollectionAttemptStatus,
   DataType,
+  EntityDomain,
   EntityType,
   type DatapointDefinition,
+  type CollectionLoop,
 } from '@prisma/client';
 import type { CompletenessResponse, NextAction } from '@nova/shared-types';
 import { randomUUID } from 'node:crypto';
@@ -19,6 +21,7 @@ import {
   COLLECTION_CAPABILITIES,
   actionTypeFor,
 } from './collection-capabilities';
+import { EntityLifecycleService } from '../datapoints/entity-lifecycle.service';
 
 type DatapointUi = {
   inputType: 'TEXT' | 'NUMBER' | 'DATE' | 'SINGLE_CHOICE' | 'YES_NO';
@@ -51,6 +54,7 @@ export class CollectionStrategyService {
     private readonly datapoints: DatapointsService,
     private readonly conversations: ConversationsService,
     private readonly profiles: RequirementProfileService,
+    private readonly entities: EntityLifecycleService,
   ) {}
 
   async select(
@@ -79,6 +83,8 @@ export class CollectionStrategyService {
           documents[0].status === 'PROCESSING' ? 'PROCESSING' : 'UPLOADED',
       };
     }
+    const loopAction = await this.loopAction(leadId, product, completeness);
+    if (loopAction) return loopAction;
     if (!completeness.missing.length)
       return { type: 'COMPLETE', actionId: randomUUID() };
     const resolved = new Map(
@@ -274,10 +280,15 @@ export class CollectionStrategyService {
       where: {
         id: actionId,
         leadId,
-        actionType: CollectionActionType.ASK_DATAPOINT,
       },
     });
-    if (!attempt) throw new NotFoundException('Datapoint action not found');
+    if (!attempt) throw new NotFoundException('Collection action not found');
+    if (attempt.actionType === CollectionActionType.ASK_ADD_ANOTHER_ENTITY) {
+      return this.answerAddAnother(leadId, attempt.id, value, message);
+    }
+    if (attempt.actionType !== CollectionActionType.ASK_DATAPOINT) {
+      throw new NotFoundException('Datapoint action not found');
+    }
     const metadata = (attempt.metadata ?? {}) as { key?: string };
     if (!metadata.key || !attempt.entityType)
       throw new NotFoundException('Datapoint action is incomplete');
@@ -331,5 +342,197 @@ export class CollectionStrategyService {
     return this.prisma.auditEvent.create({
       data: { action, entityType: 'Lead', entityId: leadId },
     });
+  }
+
+  private async loopAction(
+    leadId: string,
+    product: SelectedProduct,
+    completeness: CompletenessResponse,
+  ): Promise<NextAction | undefined> {
+    const loops = await this.entities.openLoopsForLead(leadId);
+    for (const loop of loops) {
+      const currentEntity = await this.currentLoopEntity(leadId, loop);
+      if (!currentEntity) continue;
+      const missing = completeness.missing.find(
+        (item) => item.entityId === currentEntity.id,
+      );
+      if (missing) {
+        return this.askDatapoint(leadId, product, missing);
+      }
+      return this.askAddAnother(leadId, product, loop);
+    }
+    return undefined;
+  }
+
+  private async currentLoopEntity(leadId: string, loop: CollectionLoop) {
+    return this.prisma.dossierEntity.findFirst({
+      where: {
+        customerFolder: { leadId },
+        entityType: loop.entityType,
+        role: loop.role,
+        domain: loop.domain,
+        ordinal: loop.currentOrdinal,
+      },
+    });
+  }
+
+  private async askDatapoint(
+    leadId: string,
+    product: SelectedProduct,
+    item: CompletenessResponse['missing'][number],
+  ): Promise<NextAction> {
+    const definitions = await this.profiles.forProduct(product);
+    const definition = definitions.find((d) => d.key === item.key);
+    const ui = definition
+      ? this.ui(definition)
+      : { inputType: 'TEXT' as const };
+    const attempt = await this.prisma.collectionAttempt.create({
+      data: {
+        leadId,
+        actionType: CollectionActionType.ASK_DATAPOINT,
+        entityType: item.entityType as EntityType,
+        entityId: item.entityId,
+        product,
+        metadata: { key: item.key },
+      },
+    });
+    await this.audit('NEXT_ACTION_SELECTED', leadId);
+    return {
+      type: 'ASK_DATAPOINT',
+      actionId: attempt.id,
+      datapoint: {
+        key: item.key,
+        entityType: item.entityType as `${EntityType}`,
+        ...(item.entityId ? { entityId: item.entityId } : {}),
+        ...(definition?.label ? { label: definition.label } : {}),
+        ...(definition?.description
+          ? { description: definition.description }
+          : {}),
+      },
+      ui,
+    };
+  }
+
+  private async askAddAnother(
+    leadId: string,
+    product: SelectedProduct,
+    loop: CollectionLoop,
+  ): Promise<NextAction> {
+    const existing = await this.prisma.collectionAttempt.findFirst({
+      where: {
+        leadId,
+        actionType: CollectionActionType.ASK_ADD_ANOTHER_ENTITY,
+        status: CollectionAttemptStatus.PROPOSED,
+        metadata: { path: ['loopId'], equals: loop.id },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    const attempt =
+      existing ??
+      (await this.prisma.collectionAttempt.create({
+        data: {
+          leadId,
+          actionType: CollectionActionType.ASK_ADD_ANOTHER_ENTITY,
+          entityType: loop.entityType,
+          product,
+          metadata: {
+            loopId: loop.id,
+            entityType: loop.entityType,
+            role: loop.role,
+            domain: loop.domain,
+            ordinal: loop.currentOrdinal,
+          },
+        },
+      }));
+    return {
+      type: 'ASK_ADD_ANOTHER_ENTITY',
+      actionId: attempt.id,
+      entityType: loop.entityType,
+      domain: loop.domain === EntityDomain.NONE ? undefined : loop.domain,
+      loopId: loop.id,
+      ordinal: loop.currentOrdinal,
+      label: this.loopLabel(loop),
+      question: this.loopQuestion(loop),
+      input: { type: 'YES_NO' },
+    };
+  }
+
+  private async answerAddAnother(
+    leadId: string,
+    actionId: string,
+    value: unknown,
+    message?: string,
+  ) {
+    if (typeof value !== 'boolean')
+      throw new NotFoundException('Add-another answer must be true or false');
+    const attempt = await this.prisma.collectionAttempt.findFirst({
+      where: {
+        id: actionId,
+        leadId,
+        actionType: CollectionActionType.ASK_ADD_ANOTHER_ENTITY,
+      },
+    });
+    if (!attempt) throw new NotFoundException('Add-another action not found');
+    const metadata = (attempt.metadata ?? {}) as {
+      loopId?: string;
+      answer?: boolean;
+    };
+    if (!metadata.loopId)
+      throw new NotFoundException('Add-another action is incomplete');
+    if (attempt.status !== CollectionAttemptStatus.PROPOSED) {
+      return {
+        nextAction: await this.selectForLead(leadId),
+      };
+    }
+    if (message) await this.conversations.addCustomerMessage(leadId, message);
+    if (value) {
+      await this.entities.createNextLoopEntity(
+        leadId,
+        metadata.loopId,
+        actionId,
+      );
+    } else {
+      await this.entities.closeCollectionLoop(
+        leadId,
+        metadata.loopId,
+        actionId,
+      );
+      await this.prisma.collectionAttempt.update({
+        where: { id: actionId },
+        data: {
+          metadata: { ...metadata, answer: false },
+        },
+      });
+    }
+    await this.prisma.collectionAttempt.update({
+      where: { id: actionId },
+      data: {
+        status: CollectionAttemptStatus.COMPLETED,
+        resolvedAt: new Date(),
+      },
+    });
+    return {
+      nextAction: await this.selectForLead(leadId),
+    };
+  }
+
+  private loopQuestion(loop: CollectionLoop) {
+    if (loop.entityType === EntityType.DRIVER) {
+      return 'Do you want to add another driver?';
+    }
+    return 'Do you want to add another claim?';
+  }
+
+  private loopLabel(loop: CollectionLoop) {
+    if (loop.entityType === EntityType.DRIVER) {
+      return `Additional driver ${Math.max(1, loop.currentOrdinal - 1)}`;
+    }
+    const domain =
+      loop.domain === EntityDomain.AUTO
+        ? 'Auto'
+        : loop.domain === EntityDomain.HOME
+          ? 'Home'
+          : '';
+    return `${domain} claim ${loop.currentOrdinal}`.trim();
   }
 }

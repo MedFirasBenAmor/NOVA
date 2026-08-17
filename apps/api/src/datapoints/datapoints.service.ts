@@ -212,7 +212,7 @@ export class DatapointsService {
         where: { customerFolderId: folder.id },
         include: { definition: { select: { key: true } } },
       }),
-      this.entities.primaryEntityIdsForProduct(leadId, product),
+      this.entities.scopedEntityIdsForProduct(leadId, product),
     ]);
     return resolveCompleteness(product, definitions, values, primaryEntityIds);
   }
@@ -266,11 +266,12 @@ export class DatapointsService {
     }
     if (!entityId)
       throw new BadRequestException(`${definition.key} requires an entityId`);
-    await this.entities.assertOwnedEntityType(
+    const entity = await this.entities.assertOwnedEntityType(
       leadId,
       entityId,
       definition.entityType,
     );
+    this.entities.assertEntityCompatibleWithDefinition(entity, definition);
   }
 
   validateInput(definition: DatapointDefinition, dto: UpsertDatapointDto) {

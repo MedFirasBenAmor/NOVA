@@ -19,8 +19,12 @@ const profilesFor = (definition: object) => ({
   forProduct: jest.fn().mockResolvedValue([definition]),
 });
 const entities = {
-  assertOwnedEntityType: jest.fn().mockResolvedValue({}),
+  assertOwnedEntityType: jest
+    .fn()
+    .mockResolvedValue({ entityType: EntityType.VEHICLE }),
+  assertEntityCompatibleWithDefinition: jest.fn(),
   primaryEntityIdsForProduct: jest.fn().mockResolvedValue({}),
+  scopedEntityIdsForProduct: jest.fn().mockResolvedValue({}),
 };
 
 describe('DatapointsService', () => {

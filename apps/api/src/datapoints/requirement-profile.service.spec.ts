@@ -105,6 +105,7 @@ describe('RequirementProfileService catalog contract', () => {
       {} as never,
       {} as never,
       {} as never,
+      { openLoopsForLead: jest.fn().mockResolvedValue([]) } as never,
     );
     expect(strategy['ui']({ dataType: 'BOOLEAN' } as never)).toEqual({
       inputType: 'YES_NO',
@@ -133,6 +134,7 @@ describe('RequirementProfileService catalog contract', () => {
       {} as never,
       {} as never,
       {} as never,
+      { openLoopsForLead: jest.fn().mockResolvedValue([]) } as never,
     );
     expect(strategy.productSelectionAction()).toEqual({
       type: 'SELECT_PRODUCT',
