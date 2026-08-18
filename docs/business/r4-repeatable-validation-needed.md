@@ -1,69 +1,51 @@
-# R4 Repeatable Validation Needed
+# R4.1 Repeatable Validation Notes
 
-R4 preserves the 132-definition R1 catalog and does not silently add business keys. The following business/catalog gaps remain explicit.
+R4.1 reconciles repeatable collection with the Auto + Habitation reference without preserving the old 132-definition count artificially.
 
-## Additional Driver Required Subset
+## Implemented
 
-Mapped from existing DRIVER definitions:
+- AUTO additional-driver trigger: `auto.additional_driver_exists`.
+- AUTO additional-driver required subset using existing DRIVER keys:
+  - `driver.first_name`
+  - `driver.last_name`
+  - `driver.date_of_birth`
+  - `driver.relationship_to_proposer`
+  - `driver.occupation`
+  - `driver.license_type`
+  - `driver.driving_start_year_quebec`
+- HOME repeatable claim detail keys scoped to `CLAIM`:
+  - `home_claim.type`
+  - `home_claim.year`
+  - `home_claim.description`
+- Legacy property-level HOME claim summaries are non-blocking optional summaries:
+  - `property.claim_count_last_5_years`
+  - `property.claim_most_recent_year`
+  - `property.claim_type`
+- Co-applicant conditional required subset:
+  - `co_applicant.civility`
+  - `co_applicant.first_name`
+  - `co_applicant.last_name`
+  - `co_applicant.date_of_birth`
+  - `co_applicant.occupation`
+  - `co_applicant.relationship`
+  - `co_applicant.is_vehicle_driver`
 
-- `driver.first_name`
-- `driver.last_name`
-- `driver.date_of_birth`
-- `driver.relationship_to_proposer`
-- `driver.occupation`
-- `driver.license_type`
-- `driver.driving_start_year_quebec`
+## Source-Supported But Not Implemented
 
-Validation needed:
+- Additional-driver claim relationship: the source asks whether each additional driver has claims and then asks claim details. The current model does not have an explicit `CLAIM belongs to DRIVER` relationship. R4.1 does not model that association implicitly.
 
-- The catalog has no `auto.additional_driver_exists` trigger.
-- The business reference asks for profession; current equivalent is `driver.occupation`.
-- The reference asks for year driving began; current equivalent is `driver.driving_start_year_quebec`.
+## Business Ambiguous
 
-## Additional Driver Claim Relationship
+- Maximum number of claims: no source maximum identified.
+- Maximum number of additional drivers: no source maximum identified.
+- Exact claim date: the source-supported reconstructed concept is claim year; no exact date is defined.
+- Civility/title allowed values: captured as a string because no authoritative enum values were found.
 
-`ADDITIONAL_DRIVER_CLAIM_RELATION = BUSINESS/ARCHITECTURE_GAP`
+## Deferred
 
-The current model has no authoritative relationship between a `CLAIM` entity and a specific additional `DRIVER` entity. R4 does not mix additional-driver claims into the main AUTO claim loop.
-
-## Claim Year Versus Date
-
-The current catalog uses `claim.year`, not a full claim date. Business validation is needed if exact dates are required.
-
-HOME currently uses property-scoped summary fields:
-
-- `property.claims_last_5_years`
-- `property.claim_count_last_5_years`
-- `property.claim_most_recent_year`
-- `property.claim_type`
-
-The catalog does not contain HOME `CLAIM`-scoped detail keys for type/year/description.
-
-## Max Counts
-
-No authoritative maximum claim count is present.
-
-No authoritative maximum additional driver count is present.
-
-## Co-applicant Required Subset
-
-Current required supported fields when `property.has_co_applicant = true`:
-
-- `co_applicant.first_name`
-- `co_applicant.last_name`
-- `co_applicant.date_of_birth`
-
-Business reference fields not currently represented as required catalog keys:
-
-- co-applicant title
-- co-applicant profession
-- co-applicant relationship is present but optional
-- co-applicant-as-driver indicator
-
-## Co-applicant-as-driver Relationship
-
-No canonical datapoint or relationship model currently links a HOME `CO_APPLICANT` to an AUTO `DRIVER`. R4 does not create a driver from a co-applicant.
-
-## Multi-vehicle Decision
-
-Additional vehicle lifecycle is intentionally deferred. The current catalog has `vehicle.multi_vehicle_policy_requested`, but R4 does not create additional VEHICLE entities.
+- Additional vehicle lifecycle and multi-vehicle entity creation.
+- Driver-to-vehicle assignment.
+- Co-applicant-to-driver person-role linking beyond capturing `co_applicant.is_vehicle_driver`.
+- Section confirmation, review, and reconfirmation.
+- Document OCR reconstruction beyond already restored flows.
+- Global Resume, Merge, Validation, Risk, and Eligibility engines.

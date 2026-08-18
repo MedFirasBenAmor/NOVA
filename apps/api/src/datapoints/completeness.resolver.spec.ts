@@ -18,6 +18,7 @@ function definition(
 ): {
   id: string;
   key: string;
+  product: Product;
   entityType: EntityType;
   requirementType: RequirementType;
   requiredWhen: Prisma.JsonValue | null;
@@ -25,6 +26,12 @@ function definition(
   return {
     id: id(definitionCounter++),
     key,
+    product:
+      key.startsWith('home_') ||
+      key.startsWith('property.') ||
+      key.startsWith('co_applicant.')
+        ? Product.HOME
+        : Product.AUTO,
     entityType,
     requirementType,
     requiredWhen: requiredWhen ?? null,
@@ -203,6 +210,119 @@ describe('resolveCompleteness', () => {
     );
   });
 
+  it('evaluates each HOME claim entity independently', () => {
+    const hasHomeClaims = definition(
+      'property.claims_last_5_years',
+      EntityType.PROPERTY,
+      RequirementType.REQUIRED,
+    );
+    const claimType = definition(
+      'home_claim.type',
+      EntityType.CLAIM,
+      RequirementType.CONDITIONAL,
+      { key: hasHomeClaims.key, operator: 'EQ', value: true },
+    );
+    const claimYear = definition(
+      'home_claim.year',
+      EntityType.CLAIM,
+      RequirementType.CONDITIONAL,
+      { key: hasHomeClaims.key, operator: 'EQ', value: true },
+    );
+    const claimDescription = definition(
+      'home_claim.description',
+      EntityType.CLAIM,
+      RequirementType.CONDITIONAL,
+      { key: hasHomeClaims.key, operator: 'EQ', value: true },
+    );
+    const propertyId = id(60);
+    const firstClaim = id(61);
+    const secondClaim = id(62);
+    const result = resolveCompleteness(
+      Product.HOME,
+      [hasHomeClaims, claimType, claimYear, claimDescription],
+      [
+        value(
+          hasHomeClaims.id,
+          hasHomeClaims.key,
+          EntityType.PROPERTY,
+          true,
+          propertyId,
+        ),
+        value(
+          claimType.id,
+          claimType.key,
+          EntityType.CLAIM,
+          'Water',
+          firstClaim,
+        ),
+        value(claimYear.id, claimYear.key, EntityType.CLAIM, 2024, firstClaim),
+        value(
+          claimDescription.id,
+          claimDescription.key,
+          EntityType.CLAIM,
+          'Leak',
+          firstClaim,
+        ),
+        value(
+          claimType.id,
+          claimType.key,
+          EntityType.CLAIM,
+          'Fire',
+          secondClaim,
+        ),
+        value(claimYear.id, claimYear.key, EntityType.CLAIM, 2023, secondClaim),
+      ],
+      {
+        CLAIM: [firstClaim, secondClaim],
+        PROPERTY: [propertyId],
+        __claimDomains: { [firstClaim]: 'HOME', [secondClaim]: 'HOME' },
+      },
+    );
+    expect(result.missing).toEqual([
+      expect.objectContaining({
+        key: 'home_claim.description',
+        entityId: secondClaim,
+      }),
+    ]);
+  });
+
+  it('does not let primary driver data satisfy additional driver required fields', () => {
+    const firstName = definition(
+      'driver.first_name',
+      EntityType.DRIVER,
+      RequirementType.REQUIRED,
+    );
+    const suspended = definition(
+      'driver.license_suspended_last_3_years',
+      EntityType.DRIVER,
+      RequirementType.REQUIRED,
+    );
+    const primary = id(70);
+    const additional = id(71);
+    const result = resolveCompleteness(
+      Product.AUTO,
+      [firstName, suspended],
+      [
+        value(firstName.id, firstName.key, EntityType.DRIVER, 'Alice', primary),
+        value(suspended.id, suspended.key, EntityType.DRIVER, false, primary),
+      ],
+      { DRIVER: [primary, additional] },
+    );
+    expect(result.missing).toEqual([
+      expect.objectContaining({
+        key: 'driver.first_name',
+        entityId: additional,
+      }),
+    ]);
+    expect(
+      result.missing.some(
+        (item) =>
+          item.key === 'driver.license_suspended_last_3_years' &&
+          item.entityId === additional,
+      ),
+    ).toBe(false);
+  });
+
   it('ignores values marked not applicable', () => {
     const required = definition(
       'vehicle.vin',
@@ -351,7 +471,7 @@ it('uses canonical primary entity ids for scoped primary requirements', () => {
     randomVehicle,
   );
   const result = resolveCompleteness(Product.AUTO, [year], [wrongScopedValue], {
-    [EntityType.VEHICLE]: canonicalVehicle,
+    [EntityType.VEHICLE]: [canonicalVehicle],
   });
   expect(result.completeness).toBe(0);
   expect(result.missing).toEqual([

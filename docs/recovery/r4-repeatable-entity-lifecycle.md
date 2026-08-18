@@ -1,101 +1,96 @@
-# R4 Repeatable Entity Lifecycle
+# R4.1 Repeatable Entity Lifecycle
 
-R4 adds persisted loop state for repeatable collection. The backend remains the authority for entity existence, ordinals, loop status, and whether add-another decisions are pending.
+R4.1 closes the repeatable collection gaps left by R4. The backend remains authoritative for repeatable entity existence, ordinals, loop status, and add-another closure.
 
-## Schema
+## Persisted Model
 
-`DossierEntity` now includes `domain`:
+`DossierEntity.domain` separates repeatable domains:
 
-- `NONE`: primary vehicle, driver, property, and non-domain entities.
-- `AUTO`: auto claims and auto additional drivers.
-- `HOME`: home claims and home co-applicant.
+- `AUTO` for AUTO claims and additional drivers.
+- `HOME` for HOME claims and co-applicant.
+- `NONE` for primary entities.
 
-`CollectionLoop` persists repeatable sequence state:
+`CollectionLoop` persists:
 
 - `customerFolderId`
 - `entityType`
 - `role`
 - `domain`
-- `status`
+- `status`: `COLLECTING` or `CLOSED`
 - `currentOrdinal`
-- `triggerKey`
-- `createdByAttemptId` / `closedByAttemptId`
-- timestamps and `closedAt`
+- trigger context and timestamps
 
-Loop statuses are `COLLECTING` and `CLOSED`.
+## Catalog Reconciliation
 
-## Invariants
+Before R4.1:
 
-- Primary entities use role `PRIMARY`, domain `NONE`, ordinal `1`.
-- Additional drivers use entity type `DRIVER`, role `ADDITIONAL`, domain `AUTO`, ordinals starting at `2`.
-- Claims use entity type `CLAIM`, role `REPEATABLE`, domain `AUTO` or `HOME`, ordinals starting at `1` within each domain.
-- Co-applicant uses entity type `CO_APPLICANT`, role `ADDITIONAL`, domain `HOME`, ordinal `1`, and is a singleton.
-- Entity IDs are always backend generated or safely adopted from historical data.
+- HOME claim trigger existed as `property.claims_last_5_years`.
+- HOME claim detail was property-scoped summary data, so Claim #2 could not be represented.
+- AUTO additional-driver trigger was missing.
+- Co-applicant profession, relationship-as-required, civility, and co-applicant-as-driver were missing or non-blocking.
 
-## ASK_ADD_ANOTHER_ENTITY
+After R4.1:
 
-The shared `NextAction` model includes one generic add-another action:
+- AUTO count is 48.
+- HOME count is 71.
+- Total catalog count is 139.
+- HOME repeatable claim details are `CLAIM` scoped via `home_claim.*`.
+- Property claim summary keys remain optional and non-blocking.
 
-```json
-{
-  "type": "ASK_ADD_ANOTHER_ENTITY",
-  "entityType": "CLAIM",
-  "domain": "AUTO",
-  "loopId": "...",
-  "ordinal": 1,
-  "question": "Do you want to add another claim?",
-  "input": { "type": "YES_NO" }
-}
-```
-
-The frontend renders this as the same canonical Yes/No control used for intake yes/no actions. It never creates entity IDs or ordinals.
-
-## AUTO Claim Loop
+## AUTO Claims
 
 ```mermaid
 stateDiagram-v2
   [*] --> Trigger
   Trigger --> NoLoop: auto.has_claims_last_6_years = false
-  Trigger --> Claim1: auto.has_claims_last_6_years = true
-  Claim1 --> AskAnother: claim #n required fields complete
-  AskAnother --> ClaimNext: YES / create ordinal n+1
+  Trigger --> Claim1: true / create AUTO CLAIM #1
+  Claim1 --> AskAnother: claim.type + claim.year + claim.description complete
+  AskAnother --> ClaimNext: YES / create next AUTO CLAIM ordinal
   ClaimNext --> AskAnother
-  AskAnother --> Closed: NO / persist CLOSED
-  Closed --> [*]
+  AskAnother --> Closed: NO / close AUTO CLAIM loop
 ```
 
-AUTO claims use existing catalog keys:
+AUTO claim keys:
 
 - `claim.type`
 - `claim.year`
 - `claim.description`
 
-## HOME Claim Loop
+## HOME Claims
 
 ```mermaid
 stateDiagram-v2
   [*] --> Trigger
   Trigger --> NoLoop: property.claims_last_5_years = false
-  Trigger --> HomeClaim1: property.claims_last_5_years = true
-  HomeClaim1 --> Gap: current catalog has property summary keys, not CLAIM-scoped HOME claim detail keys
-  Gap --> Closed: loop can be closed, but detail collection is a business/catalog gap
+  Trigger --> Claim1: true / create HOME CLAIM #1
+  Claim1 --> AskAnother: home_claim.type + home_claim.year + home_claim.description complete
+  AskAnother --> ClaimNext: YES / create next HOME CLAIM ordinal
+  ClaimNext --> AskAnother
+  AskAnother --> Closed: NO / close HOME CLAIM loop
 ```
 
-The current 132-definition catalog does not contain HOME `CLAIM`-scoped detail definitions. R4 persists HOME claim loop/domain state but does not invent duplicate catalog keys.
+HOME claim keys:
 
-## Additional Driver Loop
+- `home_claim.type`
+- `home_claim.year`
+- `home_claim.description`
+
+Completeness is domain-aware. AUTO claim entities do not satisfy HOME claim requirements and HOME claim entities do not satisfy AUTO claim requirements.
+
+## Additional Drivers
 
 ```mermaid
 stateDiagram-v2
-  [*] --> TriggerGap
-  TriggerGap --> Driver2: future trigger true / create ADDITIONAL DRIVER ordinal 2
-  Driver2 --> AskAnother: mapped driver fields complete
-  AskAnother --> DriverNext: YES / create next ordinal
+  [*] --> Trigger
+  Trigger --> NoLoop: auto.additional_driver_exists = false
+  Trigger --> Driver2: true / create ADDITIONAL DRIVER ordinal 2
+  Driver2 --> AskAnother: mapped driver subset complete
+  AskAnother --> DriverNext: YES / create next ADDITIONAL DRIVER ordinal
   DriverNext --> AskAnother
-  AskAnother --> Closed: NO / persist CLOSED
+  AskAnother --> Closed: NO / close additional-driver loop
 ```
 
-Mapped existing driver keys for additional drivers:
+Additional-driver required keys:
 
 - `driver.first_name`
 - `driver.last_name`
@@ -105,29 +100,31 @@ Mapped existing driver keys for additional drivers:
 - `driver.license_type`
 - `driver.driving_start_year_quebec`
 
-The current catalog has no `auto.additional_driver_exists` trigger. R4 exposes deterministic backend loop support but reports the missing trigger as a business gap.
+Primary-driver values do not satisfy additional-driver required values.
 
 ## Co-applicant
 
-When `property.has_co_applicant = true`, R4 ensures exactly one HOME `CO_APPLICANT` entity and evaluates supported conditional fields against it:
+When `property.has_co_applicant = true`, exactly one HOME `CO_APPLICANT` entity is created. Required keys:
 
+- `co_applicant.civility`
 - `co_applicant.first_name`
 - `co_applicant.last_name`
 - `co_applicant.date_of_birth`
-
-Optional current fields remain optional:
-
-- `co_applicant.email`
+- `co_applicant.occupation`
 - `co_applicant.relationship`
+- `co_applicant.is_vehicle_driver`
 
-## Ownership And Idempotency
+`co_applicant.is_vehicle_driver` captures the fact only. R4.1 does not create or link an AUTO driver from the co-applicant.
 
-All scoped writes validate that the entity belongs to the lead's `CustomerFolder`, matches the datapoint entity type, and is role/domain-compatible with the definition. Claim domain mismatches are rejected.
+## Completion Safety
 
-Loop YES/NO answers are tied to `CollectionAttempt` IDs. Replaying an already completed add-another action is a safe no-op and cannot create duplicate entities or reopen a closed loop.
+NOVA must not return `COMPLETE` while:
 
-## Completeness Integration
+- a required loop is `COLLECTING`;
+- a positive trigger has not created its required entity;
+- a current repeatable entity is incomplete;
+- Claim #2/Claim #3 is missing fields that Claim #1 already has.
 
-Completeness now accepts multiple canonical entity IDs per entity type. It evaluates each active repeatable entity independently, so Claim #1 values cannot satisfy Claim #2. Open loops are checked before COMPLETE; when a loop is open and its current entity is complete, NOVA returns `ASK_ADD_ANOTHER_ENTITY` instead of `COMPLETE`.
+## Future Integration
 
-R5 can later extend completion with section review and explicit confirmation without rewriting the loop model. R9 can use persisted loops to resume at the current entity, add-another prompt, or closed state.
+R5 can add section review and explicit confirmation on top of these loop closure semantics. R9 Global Resume can use `CollectionLoop.status`, `currentOrdinal`, and `DossierEntity` ordinals to resume at the current repeatable entity or add-another prompt.

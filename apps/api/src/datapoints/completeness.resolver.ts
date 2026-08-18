@@ -8,11 +8,14 @@ import {
   type Prisma,
 } from '@prisma/client';
 import type { CompletenessResponse } from '@nova/shared-types';
-import { additionalDriverRequiredKeys } from './entity-lifecycle.service';
+import {
+  additionalDriverRequiredKeys,
+  type ScopedEntityMap,
+} from './entity-lifecycle.service';
 
 type Definition = Pick<
   DatapointDefinition,
-  'id' | 'key' | 'entityType' | 'requirementType' | 'requiredWhen'
+  'id' | 'key' | 'product' | 'entityType' | 'requirementType' | 'requiredWhen'
 >;
 type Value = Pick<
   DatapointValue,
@@ -50,13 +53,19 @@ function isUsable(value: Value | undefined) {
 function scopesFor(
   definition: Definition,
   values: Value[],
-  scopedEntityIds: Partial<Record<EntityType, string[] | string>>,
+  scopedEntityIds: ScopedEntityMap,
 ) {
   if (!scopedEntities.has(definition.entityType)) return [undefined];
   const configuredIds = scopedEntityIds[definition.entityType];
   const canonicalIds =
     typeof configuredIds === 'string' ? [configuredIds] : configuredIds;
   if (canonicalIds?.length) {
+    if (definition.entityType === EntityType.CLAIM) {
+      return canonicalIds.filter(
+        (entityId) =>
+          scopedEntityIds.__claimDomains?.[entityId] === definition.product,
+      );
+    }
     if (
       definition.entityType === EntityType.DRIVER &&
       !additionalDriverRequiredKeys.has(definition.key)
@@ -104,7 +113,7 @@ export function resolveCompleteness(
   product: Product,
   definitions: Definition[],
   values: Value[],
-  scopedEntityIds: Partial<Record<EntityType, string[] | string>> = {},
+  scopedEntityIds: ScopedEntityMap = {},
 ): CompletenessResponse {
   const known = values.filter(isUsable).map((value) => ({
     key: value.definition.key,

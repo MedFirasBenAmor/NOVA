@@ -28,7 +28,9 @@ const scopedPrimaryTypes = new Set<EntityType>([
 ]);
 
 export type PrimaryEntityMap = Partial<Record<EntityType, string>>;
-export type ScopedEntityMap = Partial<Record<EntityType, string[]>>;
+export type ScopedEntityMap = Partial<Record<EntityType, string[]>> & {
+  __claimDomains?: Record<string, 'AUTO' | 'HOME'>;
+};
 
 export const additionalDriverRequiredKeys = new Set([
   'driver.first_name',
@@ -41,9 +43,13 @@ export const additionalDriverRequiredKeys = new Set([
 ]);
 
 export const coApplicantRequiredKeys = [
+  'co_applicant.civility',
   'co_applicant.first_name',
   'co_applicant.last_name',
   'co_applicant.date_of_birth',
+  'co_applicant.occupation',
+  'co_applicant.relationship',
+  'co_applicant.is_vehicle_driver',
 ];
 
 type Db = PrismaService | Prisma.TransactionClient;
@@ -286,6 +292,7 @@ export class EntityLifecycleService {
       orderBy: [{ entityType: 'asc' }, { role: 'asc' }, { ordinal: 'asc' }],
     });
     const result: ScopedEntityMap = {};
+    result.__claimDomains = {};
     for (const [entityType, id] of Object.entries(primary)) {
       result[entityType as EntityType] = [id];
     }
@@ -300,6 +307,10 @@ export class EntityLifecycleService {
           ...(result[entity.entityType] ?? []),
           entity.id,
         ];
+        if (entity.entityType === EntityType.CLAIM) {
+          result.__claimDomains[entity.id] =
+            entity.domain === EntityDomain.HOME ? 'HOME' : 'AUTO';
+        }
       }
     }
     return result;
@@ -345,6 +356,12 @@ export class EntityLifecycleService {
       valueFor('property.has_co_applicant') === true
     ) {
       await this.ensureCoApplicant(leadId);
+    }
+    if (
+      (product === Product.AUTO || product === Product.AUTO_HOME) &&
+      valueFor('auto.additional_driver_exists') === true
+    ) {
+      await this.ensureAdditionalDriverLoop(leadId);
     }
   }
 
@@ -518,7 +535,7 @@ export class EntityLifecycleService {
 
   async openLoopsForLead(leadId: string) {
     const folder = await this.folderForLead(this.prisma, leadId);
-    return this.prisma.collectionLoop.findMany({
+    const loops = await this.prisma.collectionLoop.findMany({
       where: {
         customerFolderId: folder.id,
         status: CollectionLoopStatus.COLLECTING,
@@ -528,6 +545,21 @@ export class EntityLifecycleService {
         { domain: 'asc' },
         { currentOrdinal: 'asc' },
       ],
+    });
+    return loops.sort((left, right) => {
+      const typePriority = (entityType: EntityType) =>
+        entityType === EntityType.CLAIM
+          ? 0
+          : entityType === EntityType.DRIVER
+            ? 1
+            : 2;
+      const domainPriority = (domain: EntityDomain) =>
+        domain === EntityDomain.AUTO ? 0 : domain === EntityDomain.HOME ? 1 : 2;
+      return (
+        typePriority(left.entityType) - typePriority(right.entityType) ||
+        domainPriority(left.domain) - domainPriority(right.domain) ||
+        left.currentOrdinal - right.currentOrdinal
+      );
     });
   }
 

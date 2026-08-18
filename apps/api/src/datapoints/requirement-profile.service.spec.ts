@@ -28,16 +28,16 @@ const keysFor = (product: Product) => {
 describe('RequirementProfileService catalog contract', () => {
   it('matches exact R1 catalog counts and requirement breakdown', () => {
     expect(productCount(Product.COMMON)).toBe(20);
-    expect(productCount(Product.AUTO)).toBe(47);
-    expect(productCount(Product.HOME)).toBe(65);
+    expect(productCount(Product.AUTO)).toBe(48);
+    expect(productCount(Product.HOME)).toBe(71);
     expect(
       productCount(Product.COMMON) +
         productCount(Product.AUTO) +
         productCount(Product.HOME),
-    ).toBe(132);
-    expect(requirementCount(RequirementType.REQUIRED)).toBe(78);
-    expect(requirementCount(RequirementType.OPTIONAL)).toBe(32);
-    expect(requirementCount(RequirementType.CONDITIONAL)).toBe(22);
+    ).toBe(139);
+    expect(requirementCount(RequirementType.REQUIRED)).toBe(79);
+    expect(requirementCount(RequirementType.OPTIONAL)).toBe(34);
+    expect(requirementCount(RequirementType.CONDITIONAL)).toBe(26);
   });
 
   it('keeps canonical keys unique so seed upserts remain idempotent', () => {
@@ -72,9 +72,9 @@ describe('RequirementProfileService catalog contract', () => {
         .productsFor(Product.AUTO_HOME)
         .filter((p) => p === Product.COMMON),
     ).toHaveLength(1);
-    expect(20 + 47).toBe(67);
-    expect(20 + 65).toBe(85);
-    expect(20 + 47 + 65).toBe(132);
+    expect(20 + 48).toBe(68);
+    expect(20 + 71).toBe(91);
+    expect(20 + 48 + 71).toBe(139);
   });
 
   it('keeps AUTO and HOME product-only requirements isolated', () => {
@@ -91,7 +91,8 @@ describe('RequirementProfileService catalog contract', () => {
           key.startsWith('vehicle.') ||
           key.startsWith('driver.') ||
           key.startsWith('auto.') ||
-          key.startsWith('claim.'),
+          key.startsWith('claim.') ||
+          key.startsWith('home_claim.'),
       ),
     ).toBe(false);
   });
