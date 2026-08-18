@@ -24,6 +24,29 @@ export type CompletenessResponse = {
   conditionalRequired: Array<CompletenessItem & { triggeredBy: string }>;
 };
 
+export type DatapointInputMetadata = {
+  inputType: 'TEXT' | 'NUMBER' | 'DATE' | 'SINGLE_CHOICE' | 'YES_NO';
+  options?: unknown[];
+};
+
+export type ReviewSectionItem = {
+  kind: 'DATAPOINT' | 'INTAKE_FACT';
+  key: string;
+  label: string;
+  value: unknown;
+  displayValue: string;
+  entityType?: IntelligenceEntityType;
+  entityId?: string;
+  entityLabel?: string;
+  editable: boolean;
+  ui?: DatapointInputMetadata;
+};
+
+export type ReviewSectionGroup = {
+  label: string;
+  items: ReviewSectionItem[];
+};
+
 export type IntelligenceIntentType =
   | 'INSURANCE_SHOPPING'
   | 'NEW_ACQUISITION'
@@ -132,10 +155,7 @@ export type NextAction =
         label?: string;
         description?: string;
       };
-      ui: {
-        inputType: 'TEXT' | 'NUMBER' | 'DATE' | 'SINGLE_CHOICE' | 'YES_NO';
-        options?: unknown[];
-      };
+      ui: DatapointInputMetadata;
     }
   | {
       type: 'ASK_GROUPED_DATAPOINTS';
@@ -193,5 +213,14 @@ export type NextAction =
       label?: string;
       question: string;
       input: { type: 'YES_NO' };
+    }
+  | {
+      type: 'REVIEW_SECTION';
+      actionId: string;
+      confirmationId: string;
+      sectionCode: string;
+      title: string;
+      snapshotHash: string;
+      groups: ReviewSectionGroup[];
     }
   | { type: 'COMPLETE'; actionId: string };

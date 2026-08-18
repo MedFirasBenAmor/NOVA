@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Get,
   Param,
   ParseUUIDPipe,
   Post,
@@ -27,6 +28,13 @@ export class CollectionController {
     @Body() dto: RespondCollectionActionDto,
   ) {
     return this.strategy.respond(leadId, actionId, dto.decision);
+  }
+
+  @Get('current')
+  current(@Param('leadId', ParseUUIDPipe) leadId: string) {
+    return this.intake.selectCore(leadId).then((nextAction) => ({
+      nextAction,
+    }));
   }
 
   @Post(':actionId/answer')

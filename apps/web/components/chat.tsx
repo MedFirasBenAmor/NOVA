@@ -9,7 +9,11 @@ import {
   ShieldCheck,
   Sparkles,
 } from 'lucide-react';
-import type { NextAction, SelectableProduct } from '@nova/shared-types';
+import type {
+  NextAction,
+  ReviewSectionItem,
+  SelectableProduct,
+} from '@nova/shared-types';
 import { api, type InteractionResponse } from '../lib/api';
 
 const SESSION_KEY = 'nova.leadId';
@@ -36,6 +40,7 @@ type ActionProps = {
   action: NextAction;
   onAnswer: (value: unknown, message: string) => void;
   onDecision: (decision: 'ACCEPTED' | 'DECLINED' | 'SKIPPED') => void;
+  onReviewEdit?: (item: ReviewSectionItem, value: unknown) => void;
   onUpload?: (file: File) => void;
   busy: boolean;
 };
@@ -44,6 +49,7 @@ export function NextActionRenderer({
   action,
   onAnswer,
   onDecision,
+  onReviewEdit,
   onUpload,
   busy,
 }: ActionProps) {
@@ -88,6 +94,15 @@ export function NextActionRenderer({
           present.
         </p>
       </div>
+    );
+  if (action.type === 'REVIEW_SECTION')
+    return (
+      <ReviewSection
+        action={action}
+        onAnswer={onAnswer}
+        onReviewEdit={onReviewEdit}
+        busy={busy}
+      />
     );
   if (
     action.type === 'ASK_CURRENT_INSURANCE' ||
@@ -219,6 +234,166 @@ export function NextActionRenderer({
       </div>
     );
   return <AskDatapoint action={action} onAnswer={onAnswer} busy={busy} />;
+}
+
+function ReviewSection({
+  action,
+  onAnswer,
+  onReviewEdit,
+  busy,
+}: {
+  action: Extract<NextAction, { type: 'REVIEW_SECTION' }>;
+  onAnswer: ActionProps['onAnswer'];
+  onReviewEdit?: ActionProps['onReviewEdit'];
+  busy: boolean;
+}) {
+  const [editing, setEditing] = useState<string>();
+  const [draft, setDraft] = useState('');
+  const startEdit = (item: ReviewSectionItem) => {
+    setEditing(`${item.key}:${item.entityId ?? 'ROOT'}`);
+    setDraft(String(item.value ?? ''));
+  };
+  const submitEdit = (event: FormEvent, item: ReviewSectionItem) => {
+    event.preventDefault();
+    if (!onReviewEdit) return;
+    const value =
+      item.ui?.inputType === 'NUMBER'
+        ? Number(draft)
+        : item.ui?.inputType === 'YES_NO'
+          ? draft === 'true'
+          : draft;
+    onReviewEdit(item, value);
+    setEditing(undefined);
+  };
+  return (
+    <div className="rounded-2xl border border-[var(--border)] bg-white p-4 shadow-sm">
+      <p className="text-base font-semibold">{action.title}</p>
+      <div className="mt-4 space-y-4">
+        {action.groups.map((group) => (
+          <div key={group.label} className="border-t border-zinc-100 pt-3">
+            <p className="text-xs font-semibold uppercase text-zinc-500">
+              {group.label}
+            </p>
+            <div className="mt-2 space-y-2">
+              {group.items.map((item) => {
+                const editKey = `${item.key}:${item.entityId ?? 'ROOT'}`;
+                const isEditing = editing === editKey;
+                return (
+                  <div
+                    key={editKey}
+                    className="rounded-xl border border-zinc-100 p-3"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-medium">{item.label}</p>
+                        {!isEditing && (
+                          <p className="mt-1 text-sm text-zinc-600">
+                            {item.displayValue}
+                          </p>
+                        )}
+                      </div>
+                      {item.editable && onReviewEdit && !isEditing && (
+                        <button
+                          disabled={busy}
+                          onClick={() => startEdit(item)}
+                          className="min-h-9 rounded-xl border border-[var(--border)] px-3 text-xs font-medium"
+                        >
+                          Edit
+                        </button>
+                      )}
+                    </div>
+                    {isEditing && (
+                      <form
+                        className="mt-3 flex flex-col gap-2 sm:flex-row"
+                        onSubmit={(event) => submitEdit(event, item)}
+                      >
+                        <ReviewEditInput
+                          item={item}
+                          value={draft}
+                          onChange={setDraft}
+                        />
+                        <button
+                          disabled={busy}
+                          className="min-h-10 rounded-xl bg-[var(--accent)] px-3 text-sm font-medium text-white"
+                        >
+                          Save
+                        </button>
+                      </form>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+      <button
+        disabled={busy}
+        onClick={() =>
+          onAnswer(
+            { snapshotHash: action.snapshotHash },
+            'These details are correct',
+          )
+        }
+        className="mt-4 min-h-11 w-full rounded-xl bg-[var(--accent)] px-4 text-sm font-medium text-white"
+      >
+        These details are correct
+      </button>
+    </div>
+  );
+}
+
+function ReviewEditInput({
+  item,
+  value,
+  onChange,
+}: {
+  item: ReviewSectionItem;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  if (item.ui?.inputType === 'YES_NO')
+    return (
+      <select
+        aria-label={item.label}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="min-h-10 flex-1 rounded-xl border border-[var(--border)] px-3 text-sm"
+      >
+        <option value="true">Yes</option>
+        <option value="false">No</option>
+      </select>
+    );
+  if (item.ui?.inputType === 'SINGLE_CHOICE')
+    return (
+      <select
+        aria-label={item.label}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="min-h-10 flex-1 rounded-xl border border-[var(--border)] px-3 text-sm"
+      >
+        {(item.ui.options ?? []).map((option) => (
+          <option key={String(option)} value={String(option)}>
+            {display(option)}
+          </option>
+        ))}
+      </select>
+    );
+  return (
+    <input
+      aria-label={item.label}
+      type={
+        item.ui?.inputType === 'NUMBER'
+          ? 'number'
+          : item.ui?.inputType === 'DATE'
+            ? 'date'
+            : 'text'
+      }
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      className="min-h-10 flex-1 rounded-xl border border-[var(--border)] px-3 text-sm"
+    />
+  );
 }
 
 function AskDatapoint({
@@ -577,6 +752,39 @@ export default function ChatShell() {
       setBusy(false);
     }
   };
+  const reviewEdit = async (item: ReviewSectionItem, value: unknown) => {
+    if (!leadId || !action || !('actionId' in action) || busy) return;
+    setBusy(true);
+    setError(undefined);
+    try {
+      await api.updateDatapoint(leadId, {
+        key: item.key,
+        value,
+        entityType: item.entityType,
+        entityId: item.entityId,
+        sourceReferenceId: action.actionId,
+      });
+      const response = await api.currentAction(leadId);
+      setAction(response.nextAction);
+      setMessages((current) => [
+        ...current,
+        {
+          id: crypto.randomUUID(),
+          role: 'NOVA',
+          content: 'NOVA updated this section for review.',
+          action: response.nextAction,
+        },
+      ]);
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : 'That edit could not be saved.',
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
   if (loading)
     return (
       <main className="grid min-h-[calc(100vh-4rem)] place-items-center">
@@ -632,6 +840,7 @@ export default function ChatShell() {
                       action={message.action}
                       onAnswer={answer}
                       onDecision={decide}
+                      onReviewEdit={reviewEdit}
                       onUpload={upload}
                       busy={busy}
                     />

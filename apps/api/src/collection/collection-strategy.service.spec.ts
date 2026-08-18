@@ -28,7 +28,11 @@ const definitions = [
   requirementType: RequirementType.REQUIRED,
 }));
 
-function setup(attempts: object[] = [], catalog: object[] = definitions) {
+function setup(
+  attempts: object[] = [],
+  catalog: object[] = definitions,
+  reviews?: object,
+) {
   const prisma = {
     datapointDefinition: { findMany: jest.fn().mockResolvedValue(catalog) },
     collectionAttempt: {
@@ -45,6 +49,7 @@ function setup(attempts: object[] = [], catalog: object[] = definitions) {
     auditEvent: { create: jest.fn().mockResolvedValue({}) },
     datapointValue: { findMany: jest.fn().mockResolvedValue([]) },
     document: { findMany: jest.fn().mockResolvedValue([]) },
+    lead: { update: jest.fn().mockResolvedValue({}) },
   };
   return {
     service: new CollectionStrategyService(
@@ -53,6 +58,7 @@ function setup(attempts: object[] = [], catalog: object[] = definitions) {
       { addCustomerMessage: jest.fn() } as never,
       { forProduct: jest.fn().mockResolvedValue(catalog) } as never,
       { openLoopsForLead: jest.fn().mockResolvedValue([]) } as never,
+      reviews as never,
     ),
     prisma,
   };
@@ -136,6 +142,32 @@ describe('CollectionStrategyService', () => {
       },
     );
     expect(result.type).toBe('COMPLETE');
+  });
+
+  it('returns REVIEW_SECTION before COMPLETE when data is complete but unconfirmed', async () => {
+    const { service } = setup([], definitions, {
+      nextReviewAction: jest.fn().mockResolvedValue({
+        type: 'REVIEW_SECTION',
+        actionId: 'review-action',
+        confirmationId: 'confirmation-1',
+        sectionCode: 'AUTO_DRIVER',
+        title: 'Drivers',
+        snapshotHash: 'hash',
+        groups: [],
+      }),
+    });
+    const result = await service.select(
+      '00000000-0000-4000-8000-000000000002',
+      Product.AUTO,
+      {
+        product: 'AUTO',
+        completeness: 100,
+        known: [],
+        missing: [],
+        conditionalRequired: [],
+      },
+    );
+    expect(result.type).toBe('REVIEW_SECTION');
   });
 
   it('waits for an uploaded document instead of asking covered questions', async () => {

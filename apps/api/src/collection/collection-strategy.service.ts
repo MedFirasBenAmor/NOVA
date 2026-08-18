@@ -5,6 +5,7 @@ import {
   DataType,
   EntityDomain,
   EntityType,
+  IntakePhase,
   type DatapointDefinition,
   type CollectionLoop,
 } from '@prisma/client';
@@ -22,6 +23,7 @@ import {
   actionTypeFor,
 } from './collection-capabilities';
 import { EntityLifecycleService } from '../datapoints/entity-lifecycle.service';
+import { SectionReviewService } from '../datapoints/section-review.service';
 
 type DatapointUi = {
   inputType: 'TEXT' | 'NUMBER' | 'DATE' | 'SINGLE_CHOICE' | 'YES_NO';
@@ -55,6 +57,7 @@ export class CollectionStrategyService {
     private readonly conversations: ConversationsService,
     private readonly profiles: RequirementProfileService,
     private readonly entities: EntityLifecycleService,
+    private readonly reviews?: SectionReviewService,
   ) {}
 
   async select(
@@ -85,8 +88,18 @@ export class CollectionStrategyService {
     }
     const loopAction = await this.loopAction(leadId, product, completeness);
     if (loopAction) return loopAction;
-    if (!completeness.missing.length)
+    if (!completeness.missing.length) {
+      const reviewAction = await this.reviews?.nextReviewAction(
+        leadId,
+        product,
+      );
+      if (reviewAction) return reviewAction;
+      await this.prisma.lead.update({
+        where: { id: leadId },
+        data: { intakePhase: IntakePhase.COMPLETE },
+      });
       return { type: 'COMPLETE', actionId: randomUUID() };
+    }
     const resolved = new Map(
       attempts
         .filter(
@@ -285,6 +298,12 @@ export class CollectionStrategyService {
     if (!attempt) throw new NotFoundException('Collection action not found');
     if (attempt.actionType === CollectionActionType.ASK_ADD_ANOTHER_ENTITY) {
       return this.answerAddAnother(leadId, attempt.id, value, message);
+    }
+    if (attempt.actionType === CollectionActionType.REVIEW_SECTION) {
+      await this.reviews?.confirm(leadId, attempt.id, value, message);
+      return {
+        nextAction: await this.selectForLead(leadId),
+      };
     }
     if (attempt.actionType !== CollectionActionType.ASK_DATAPOINT) {
       throw new NotFoundException('Datapoint action not found');

@@ -78,6 +78,28 @@ export const api = {
       `/leads/${leadId}/collection-actions/${actionId}/answer`,
       { method: 'POST', body: JSON.stringify({ value, message }) },
     ),
+  currentAction: (leadId: string) =>
+    request<{ nextAction: NextAction }>(
+      `/leads/${leadId}/collection-actions/current`,
+    ),
+  updateDatapoint: (
+    leadId: string,
+    body: {
+      key: string;
+      value: unknown;
+      entityType?: string;
+      entityId?: string;
+      sourceReferenceId?: string;
+    },
+  ) =>
+    request(`/leads/${leadId}/datapoints`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        ...body,
+        sourceType: 'CUSTOMER_FORM',
+        collectionMethod: 'MANUAL_ENTRY',
+      }),
+    }),
   upload: async (leadId: string, actionId: string, file: File) => {
     const form = new FormData();
     form.append('file', file);

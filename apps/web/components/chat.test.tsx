@@ -1,4 +1,10 @@
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { NextAction } from '@nova/shared-types';
 import ChatShell, { NextActionRenderer } from './chat';
@@ -112,6 +118,63 @@ describe('NextActionRenderer', () => {
       screen.getByRole('button', { name: /Continue without document/ }),
     );
     expect(handlers.onDecision).toHaveBeenCalledWith('DECLINED');
+  });
+
+  it('renders REVIEW_SECTION groups and submits explicit confirmation', () => {
+    const onReviewEdit = vi.fn();
+    const action: NextAction = {
+      type: 'REVIEW_SECTION',
+      actionId: 'review-1',
+      confirmationId: 'confirmation-1',
+      sectionCode: 'AUTO_DRIVER',
+      title: 'Drivers',
+      snapshotHash: 'hash-1',
+      groups: [
+        {
+          label: 'Primary driver',
+          items: [
+            {
+              kind: 'DATAPOINT',
+              key: 'driver.first_name',
+              label: 'First name',
+              value: 'Alice',
+              displayValue: 'Alice',
+              entityType: 'DRIVER',
+              entityId: '00000000-0000-4000-8000-000000000001',
+              entityLabel: 'Primary driver',
+              editable: true,
+              ui: { inputType: 'TEXT' },
+            },
+          ],
+        },
+      ],
+    };
+    render(
+      <NextActionRenderer
+        action={action}
+        {...handlers}
+        onReviewEdit={onReviewEdit}
+      />,
+    );
+    expect(screen.getByText('Drivers')).toBeInTheDocument();
+    expect(screen.getByText('Primary driver')).toBeInTheDocument();
+    expect(screen.queryByText(/00000000/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    fireEvent.change(screen.getByLabelText('First name'), {
+      target: { value: 'Alicia' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(onReviewEdit).toHaveBeenCalledWith(
+      expect.objectContaining({ key: 'driver.first_name' }),
+      'Alicia',
+    );
+    fireEvent.click(
+      screen.getByRole('button', { name: 'These details are correct' }),
+    );
+    expect(handlers.onAnswer).toHaveBeenCalledWith(
+      { snapshotHash: 'hash-1' },
+      'These details are correct',
+    );
   });
 
   it('selects an accepted document file and renders WAIT_FOR_PROCESSING', () => {
@@ -286,7 +349,9 @@ describe('ChatShell', () => {
       await Promise.resolve();
     });
     expect(screen.getByText('42%')).toBeInTheDocument();
-    expect(screen.getByText(/information currently required/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/information currently required/),
+    ).toBeInTheDocument();
     expect(localStorage.getItem('nova.processingDocument')).toBeNull();
     expect(fetchMock).toHaveBeenLastCalledWith(
       expect.stringContaining('/documents/document-1/status'),
@@ -339,6 +404,8 @@ describe('ChatShell', () => {
     expect(
       screen.getByText(/couldn't read this document automatically/i),
     ).toBeInTheDocument();
-    expect(screen.getByText(/information currently required/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/information currently required/),
+    ).toBeInTheDocument();
   });
 });

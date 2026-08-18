@@ -11,7 +11,6 @@ import {
   type Lead,
 } from '@prisma/client';
 import type { NextAction, ProductDomain } from '@nova/shared-types';
-import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { DatapointsService } from '../datapoints/datapoints.service';
 import {
@@ -65,12 +64,6 @@ export class IntakeOrchestratorService {
     if (lead.selectedProduct && lead.selectedProduct !== product) {
       throw new BadRequestException('Product is already selected');
     }
-    if (lead.intakePhase === IntakePhase.COMPLETE)
-      return {
-        selectedProduct: lead.selectedProduct,
-        nextAction: { type: 'COMPLETE' as const, actionId: randomUUID() },
-      };
-
     await this.prisma.lead.update({
       where: { id: leadId },
       data: { selectedProduct: product },
@@ -88,9 +81,6 @@ export class IntakeOrchestratorService {
       await this.ensurePhase(lead, IntakePhase.PRODUCT_SELECTION);
       return this.productSelectionAction();
     }
-    if (lead.intakePhase === IntakePhase.COMPLETE)
-      return { type: 'COMPLETE', actionId: randomUUID() };
-
     const expected = this.expectedIntakeAction(lead);
     if (expected) {
       await this.ensurePhase(lead, expected.phase);
