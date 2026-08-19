@@ -5,7 +5,6 @@ import {
 } from '@nestjs/common';
 import {
   CollectionMethod,
-  DataType,
   DatapointStatus,
   EntityType,
   Prisma,
@@ -20,6 +19,7 @@ import {
   type SelectedProduct,
 } from './requirement-profile.service';
 import { EntityLifecycleService } from './entity-lifecycle.service';
+import { validateValueAgainstInputContract } from './input-contract';
 
 const scopedEntities = new Set<EntityType>([
   EntityType.VEHICLE,
@@ -285,30 +285,7 @@ export class DatapointsService {
       throw new BadRequestException(`${definition.key} requires an entityId`);
     }
 
-    const validType =
-      (definition.dataType === DataType.STRING &&
-        typeof dto.value === 'string') ||
-      (definition.dataType === DataType.NUMBER &&
-        typeof dto.value === 'number') ||
-      (definition.dataType === DataType.BOOLEAN &&
-        typeof dto.value === 'boolean') ||
-      (definition.dataType === DataType.DATE &&
-        typeof dto.value === 'string' &&
-        !Number.isNaN(Date.parse(dto.value))) ||
-      (definition.dataType === DataType.ENUM &&
-        typeof dto.value === 'string') ||
-      (definition.dataType === DataType.OBJECT &&
-        typeof dto.value === 'object' &&
-        dto.value !== null);
-    if (!validType)
-      throw new BadRequestException(`Invalid value for ${definition.key}`);
-
-    const rules = definition.validationRules as {
-      allowedValues?: unknown[];
-    } | null;
-    if (rules?.allowedValues && !rules.allowedValues.includes(dto.value)) {
-      throw new BadRequestException(`Unsupported value for ${definition.key}`);
-    }
+    validateValueAgainstInputContract(definition, dto.value);
   }
 
   private defaultStatus(method: CollectionMethod) {

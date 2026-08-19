@@ -2,11 +2,9 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import {
   CollectionActionType,
   CollectionAttemptStatus,
-  DataType,
   EntityDomain,
   EntityType,
   IntakePhase,
-  type DatapointDefinition,
   type CollectionLoop,
 } from '@prisma/client';
 import type { CompletenessResponse, NextAction } from '@nova/shared-types';
@@ -24,11 +22,7 @@ import {
 } from './collection-capabilities';
 import { EntityLifecycleService } from '../datapoints/entity-lifecycle.service';
 import { SectionReviewService } from '../datapoints/section-review.service';
-
-type DatapointUi = {
-  inputType: 'TEXT' | 'NUMBER' | 'DATE' | 'SINGLE_CHOICE' | 'YES_NO';
-  options?: unknown[];
-};
+import { buildInputContract } from '../datapoints/input-contract';
 
 @Injectable()
 export class CollectionStrategyService {
@@ -218,9 +212,9 @@ export class CollectionStrategyService {
       ) ??
       completeness.missing[0];
     const definition = definitions.find((d) => d.key === item.key);
-    const ui = definition
-      ? this.ui(definition)
-      : { inputType: 'TEXT' as const };
+    if (!definition)
+      throw new NotFoundException(`Definition not found for ${item.key}`);
+    const input = buildInputContract(definition);
     const attempt = await this.prisma.collectionAttempt.create({
       data: {
         leadId,
@@ -243,7 +237,7 @@ export class CollectionStrategyService {
           ? { description: definition.description }
           : {}),
       },
-      ui,
+      input,
     };
     await this.audit('NEXT_ACTION_SELECTED', leadId);
     return action;
@@ -343,20 +337,6 @@ export class CollectionStrategyService {
     };
   }
 
-  private ui(definition: DatapointDefinition): DatapointUi {
-    if (definition.dataType === DataType.ENUM)
-      return {
-        inputType: 'SINGLE_CHOICE',
-        options:
-          (definition.validationRules as { allowedValues?: unknown[] } | null)
-            ?.allowedValues ?? [],
-      };
-    if (definition.dataType === DataType.BOOLEAN)
-      return { inputType: 'YES_NO' };
-    if (definition.dataType === DataType.NUMBER) return { inputType: 'NUMBER' };
-    if (definition.dataType === DataType.DATE) return { inputType: 'DATE' };
-    return { inputType: 'TEXT' };
-  }
   private audit(action: string, leadId: string) {
     return this.prisma.auditEvent.create({
       data: { action, entityType: 'Lead', entityId: leadId },
@@ -402,9 +382,9 @@ export class CollectionStrategyService {
   ): Promise<NextAction> {
     const definitions = await this.profiles.forProduct(product);
     const definition = definitions.find((d) => d.key === item.key);
-    const ui = definition
-      ? this.ui(definition)
-      : { inputType: 'TEXT' as const };
+    if (!definition)
+      throw new NotFoundException(`Definition not found for ${item.key}`);
+    const input = buildInputContract(definition);
     const attempt = await this.prisma.collectionAttempt.create({
       data: {
         leadId,
@@ -428,7 +408,7 @@ export class CollectionStrategyService {
           ? { description: definition.description }
           : {}),
       },
-      ui,
+      input,
     };
   }
 

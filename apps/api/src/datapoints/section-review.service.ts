@@ -7,7 +7,6 @@ import {
 import {
   CollectionActionType,
   CollectionAttemptStatus,
-  DataType,
   EntityDomain,
   EntityRole,
   EntityType,
@@ -18,7 +17,6 @@ import {
   type DossierEntity,
 } from '@prisma/client';
 import type {
-  DatapointInputMetadata,
   NextAction,
   ProductDomain,
   ReviewSectionGroup,
@@ -30,6 +28,7 @@ import {
   RequirementProfileService,
   type SelectedProduct,
 } from './requirement-profile.service';
+import { buildInputContract } from './input-contract';
 
 export type ReviewSectionCode =
   | 'PERSONAL'
@@ -548,7 +547,7 @@ export class SectionReviewService {
       ...(value.entityId ? { entityId: value.entityId } : {}),
       ...(entity ? { entityLabel: this.entityLabel(entity) } : {}),
       editable: true,
-      ui: this.ui(value.definition),
+      input: buildInputContract(value.definition),
     };
   }
 
@@ -640,21 +639,6 @@ export class SectionReviewService {
     if (entity.entityType === EntityType.CLAIM) return 60;
     if (entity.entityType === EntityType.CO_APPLICANT) return 70;
     return 80;
-  }
-
-  private ui(definition: DatapointDefinition): DatapointInputMetadata {
-    if (definition.dataType === DataType.ENUM)
-      return {
-        inputType: 'SINGLE_CHOICE',
-        options:
-          (definition.validationRules as { allowedValues?: unknown[] } | null)
-            ?.allowedValues ?? [],
-      };
-    if (definition.dataType === DataType.BOOLEAN)
-      return { inputType: 'YES_NO' };
-    if (definition.dataType === DataType.NUMBER) return { inputType: 'NUMBER' };
-    if (definition.dataType === DataType.DATE) return { inputType: 'DATE' };
-    return { inputType: 'TEXT' };
   }
 
   private displayValue(value: unknown) {

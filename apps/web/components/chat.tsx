@@ -257,9 +257,9 @@ function ReviewSection({
     event.preventDefault();
     if (!onReviewEdit) return;
     const value =
-      item.ui?.inputType === 'NUMBER'
+      item.input?.type === 'NUMBER'
         ? Number(draft)
-        : item.ui?.inputType === 'YES_NO'
+        : item.input?.type === 'YES_NO'
           ? draft === 'true'
           : draft;
     onReviewEdit(item, value);
@@ -352,7 +352,7 @@ function ReviewEditInput({
   value: string;
   onChange: (value: string) => void;
 }) {
-  if (item.ui?.inputType === 'YES_NO')
+  if (item.input?.type === 'YES_NO')
     return (
       <select
         aria-label={item.label}
@@ -364,7 +364,7 @@ function ReviewEditInput({
         <option value="false">No</option>
       </select>
     );
-  if (item.ui?.inputType === 'SINGLE_CHOICE')
+  if (item.input?.type === 'SINGLE_CHOICE')
     return (
       <select
         aria-label={item.label}
@@ -372,20 +372,26 @@ function ReviewEditInput({
         onChange={(event) => onChange(event.target.value)}
         className="min-h-10 flex-1 rounded-xl border border-[var(--border)] px-3 text-sm"
       >
-        {(item.ui.options ?? []).map((option) => (
-          <option key={String(option)} value={String(option)}>
-            {display(option)}
+        {item.input.options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
           </option>
         ))}
       </select>
+    );
+  if (item.input?.type === 'BUSINESS_VALIDATION_REQUIRED')
+    return (
+      <p role="alert" className="text-sm text-red-700">
+        This field needs catalog configuration before it can be edited.
+      </p>
     );
   return (
     <input
       aria-label={item.label}
       type={
-        item.ui?.inputType === 'NUMBER'
+        item.input?.type === 'NUMBER'
           ? 'number'
-          : item.ui?.inputType === 'DATE'
+          : item.input?.type === 'DATE'
             ? 'date'
             : 'text'
       }
@@ -406,31 +412,76 @@ function AskDatapoint({
   busy: boolean;
 }) {
   const [value, setValue] = useState('');
+  const [multiValue, setMultiValue] = useState<string[]>([]);
   const label = action.datapoint.label ?? display(action.datapoint.key);
   const submit = (event: FormEvent) => {
     event.preventDefault();
     if (value.trim())
-      onAnswer(action.ui.inputType === 'NUMBER' ? Number(value) : value, value);
+      onAnswer(action.input.type === 'NUMBER' ? Number(value) : value, value);
   };
-  if (
-    action.ui.inputType === 'SINGLE_CHOICE' ||
-    action.ui.inputType === 'YES_NO'
-  )
+  if (action.input.type === 'BUSINESS_VALIDATION_REQUIRED')
+    return (
+      <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+        This question needs catalog configuration before NOVA can ask it.
+      </div>
+    );
+  if (action.input.type === 'MULTI_CHOICE')
     return (
       <div className="rounded-2xl border border-[var(--border)] bg-white p-4">
         <p className="font-medium">{label}?</p>
         <div className="mt-3 grid gap-2 sm:grid-cols-2">
-          {(
-            action.ui.options ??
-            (action.ui.inputType === 'YES_NO' ? [true, false] : [])
+          {action.input.options.map((option) => {
+            const checked = multiValue.includes(option.value);
+            return (
+              <label
+                key={option.value}
+                className="flex min-h-12 items-center gap-2 rounded-xl border border-[var(--border)] px-4 text-sm font-medium"
+              >
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  disabled={busy}
+                  onChange={(event) =>
+                    setMultiValue((current) =>
+                      event.target.checked
+                        ? [...current, option.value]
+                        : current.filter((value) => value !== option.value),
+                    )
+                  }
+                />
+                {option.label}
+              </label>
+            );
+          })}
+        </div>
+        <button
+          disabled={busy}
+          onClick={() => onAnswer(multiValue, multiValue.join(', '))}
+          className="mt-3 min-h-11 rounded-xl bg-[var(--accent)] px-4 text-sm font-medium text-white disabled:opacity-50"
+        >
+          Continue
+        </button>
+      </div>
+    );
+  if (action.input.type === 'SINGLE_CHOICE' || action.input.type === 'YES_NO')
+    return (
+      <div className="rounded-2xl border border-[var(--border)] bg-white p-4">
+        <p className="font-medium">{label}?</p>
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          {(action.input.type === 'YES_NO'
+            ? [
+                { value: true, label: 'Yes' },
+                { value: false, label: 'No' },
+              ]
+            : action.input.options
           ).map((option) => (
             <button
-              key={String(option)}
+              key={String(option.value)}
               disabled={busy}
-              onClick={() => onAnswer(option, display(option))}
+              onClick={() => onAnswer(option.value, option.label)}
               className="min-h-12 rounded-xl border border-[var(--border)] px-4 text-left text-sm font-medium hover:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
             >
-              {display(option)}
+              {option.label}
             </button>
           ))}
         </div>
@@ -447,9 +498,9 @@ function AskDatapoint({
       <input
         id="datapoint-answer"
         type={
-          action.ui.inputType === 'NUMBER'
+          action.input.type === 'NUMBER'
             ? 'number'
-            : action.ui.inputType === 'DATE'
+            : action.input.type === 'DATE'
               ? 'date'
               : 'text'
         }

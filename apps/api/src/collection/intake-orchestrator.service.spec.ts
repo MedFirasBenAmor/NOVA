@@ -149,7 +149,7 @@ function setup(
         type: 'ASK_DATAPOINT',
         actionId: 'core-action',
         datapoint: { key: 'customer.first_name', entityType: 'CUSTOMER' },
-        ui: { inputType: 'TEXT' },
+        input: { type: 'TEXT' },
       },
     ),
   };

@@ -1,8 +1,9 @@
 import { readFileSync } from 'node:fs';
-import { Product, RequirementType } from '@prisma/client';
+import { DataType, Product, RequirementType } from '@prisma/client';
 import { validate } from 'class-validator';
 import { CollectionStrategyService } from '../collection/collection-strategy.service';
 import { SelectProductDto } from '../leads/dto/select-product.dto';
+import { buildInputContract } from './input-contract';
 import { RequirementProfileService } from './requirement-profile.service';
 
 const seed = () => readFileSync('prisma/seed.ts', 'utf8');
@@ -101,22 +102,28 @@ describe('RequirementProfileService catalog contract', () => {
     const source = seed();
     expect(source).toContain("allowedValues: ['NEW', 'USED', 'DEMO']");
     expect(source).toContain("allowedValues: ['OWNER', 'TENANT', 'LANDLORD']");
-    const strategy = new CollectionStrategyService(
-      {} as never,
-      {} as never,
-      {} as never,
-      {} as never,
-      { openLoopsForLead: jest.fn().mockResolvedValue([]) } as never,
-    );
-    expect(strategy['ui']({ dataType: 'BOOLEAN' } as never)).toEqual({
-      inputType: 'YES_NO',
+    expect(
+      buildInputContract({
+        key: 'test.boolean',
+        dataType: DataType.BOOLEAN,
+        validationRules: null,
+      }),
+    ).toEqual({
+      type: 'YES_NO',
     });
     expect(
-      strategy['ui']({
-        dataType: 'ENUM',
+      buildInputContract({
+        key: 'test.enum',
+        dataType: DataType.ENUM,
         validationRules: { allowedValues: ['A', 'B'] },
-      } as never),
-    ).toEqual({ inputType: 'SINGLE_CHOICE', options: ['A', 'B'] });
+      }),
+    ).toEqual({
+      type: 'SINGLE_CHOICE',
+      options: [
+        { value: 'A', label: 'A' },
+        { value: 'B', label: 'B' },
+      ],
+    });
   });
 
   it('validates backend product selection enum contract', async () => {

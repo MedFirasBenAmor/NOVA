@@ -24,10 +24,19 @@ export type CompletenessResponse = {
   conditionalRequired: Array<CompletenessItem & { triggeredBy: string }>;
 };
 
-export type DatapointInputMetadata = {
-  inputType: 'TEXT' | 'NUMBER' | 'DATE' | 'SINGLE_CHOICE' | 'YES_NO';
-  options?: unknown[];
+export type ChoiceOption = {
+  value: string;
+  label: string;
 };
+
+export type InputContract =
+  | { type: 'YES_NO' }
+  | { type: 'SINGLE_CHOICE'; options: ChoiceOption[] }
+  | { type: 'MULTI_CHOICE'; options: ChoiceOption[] }
+  | { type: 'TEXT' }
+  | { type: 'NUMBER' }
+  | { type: 'DATE' }
+  | { type: 'BUSINESS_VALIDATION_REQUIRED'; reason: string };
 
 export type ReviewSectionItem = {
   kind: 'DATAPOINT' | 'INTAKE_FACT';
@@ -39,7 +48,7 @@ export type ReviewSectionItem = {
   entityId?: string;
   entityLabel?: string;
   editable: boolean;
-  ui?: DatapointInputMetadata;
+  input?: InputContract;
 };
 
 export type ReviewSectionGroup = {
@@ -155,7 +164,7 @@ export type NextAction =
         label?: string;
         description?: string;
       };
-      ui: DatapointInputMetadata;
+      input: InputContract;
     }
   | {
       type: 'ASK_GROUPED_DATAPOINTS';

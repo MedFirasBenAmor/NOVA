@@ -18,7 +18,14 @@ describe('NextActionRenderer', () => {
   afterEach(() => cleanup());
 
   it.each([
-    ['SINGLE_CHOICE', ['PLEASURE', 'WORK'], 'Pleasure'],
+    [
+      'SINGLE_CHOICE',
+      [
+        { value: 'PLEASURE', label: 'Pleasure' },
+        { value: 'WORK', label: 'Work' },
+      ],
+      'Pleasure',
+    ],
     ['YES_NO', undefined, 'Yes'],
   ] as const)(
     'renders %s choices from backend metadata',
@@ -31,7 +38,10 @@ describe('NextActionRenderer', () => {
           entityType: 'VEHICLE',
           label: 'Primary use',
         },
-        ui: { inputType, ...(options ? { options: [...options] } : {}) },
+        input:
+          inputType === 'SINGLE_CHOICE'
+            ? { type: inputType, options: [...(options ?? [])] }
+            : { type: inputType },
       };
       render(<NextActionRenderer action={action} {...handlers} />);
       fireEvent.click(screen.getByRole('button', { name: expected }));
@@ -48,7 +58,7 @@ describe('NextActionRenderer', () => {
       type: 'ASK_DATAPOINT',
       actionId: 'a',
       datapoint: { key: 'driver.date_of_birth', entityType: 'DRIVER' },
-      ui: { inputType },
+      input: { type: inputType },
     };
     render(<NextActionRenderer action={action} {...handlers} />);
     expect(screen.getByLabelText(/Driver Date Of Birth/i)).toHaveAttribute(
@@ -143,7 +153,7 @@ describe('NextActionRenderer', () => {
               entityId: '00000000-0000-4000-8000-000000000001',
               entityLabel: 'Primary driver',
               editable: true,
-              ui: { inputType: 'TEXT' },
+              input: { type: 'TEXT' },
             },
           ],
         },
@@ -175,6 +185,75 @@ describe('NextActionRenderer', () => {
       { snapshotHash: 'hash-1' },
       'These details are correct',
     );
+  });
+
+  it('preselects review edit values and submits canonical choice values', () => {
+    const onReviewEdit = vi.fn();
+    const action: NextAction = {
+      type: 'REVIEW_SECTION',
+      actionId: 'review-2',
+      confirmationId: 'confirmation-2',
+      sectionCode: 'AUTO_ACQUISITION',
+      title: 'Vehicle acquisition',
+      snapshotHash: 'hash-2',
+      groups: [
+        {
+          label: 'Vehicle',
+          items: [
+            {
+              kind: 'DATAPOINT',
+              key: 'vehicle.financing_status',
+              label: 'Financing status',
+              value: 'LEASED',
+              displayValue: 'Leased',
+              entityType: 'VEHICLE',
+              entityId: '00000000-0000-4000-8000-000000000010',
+              entityLabel: 'Vehicle',
+              editable: true,
+              input: {
+                type: 'SINGLE_CHOICE',
+                options: [
+                  { value: 'FINANCED', label: 'Financed' },
+                  { value: 'LEASED', label: 'Leased' },
+                ],
+              },
+            },
+            {
+              kind: 'DATAPOINT',
+              key: 'vehicle.purchase_or_lease_date',
+              label: 'Purchase date',
+              value: '2026-08-19',
+              displayValue: '2026-08-19',
+              entityType: 'VEHICLE',
+              entityId: '00000000-0000-4000-8000-000000000010',
+              entityLabel: 'Vehicle',
+              editable: true,
+              input: { type: 'DATE' },
+            },
+          ],
+        },
+      ],
+    };
+    render(
+      <NextActionRenderer
+        action={action}
+        {...handlers}
+        onReviewEdit={onReviewEdit}
+      />,
+    );
+    fireEvent.click(screen.getAllByRole('button', { name: 'Edit' })[0]);
+    expect(screen.getByLabelText('Financing status')).toHaveValue('LEASED');
+    fireEvent.change(screen.getByLabelText('Financing status'), {
+      target: { value: 'FINANCED' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(onReviewEdit).toHaveBeenCalledWith(
+      expect.objectContaining({ key: 'vehicle.financing_status' }),
+      'FINANCED',
+    );
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Edit' })[1]);
+    expect(screen.getByLabelText('Purchase date')).toHaveValue('2026-08-19');
   });
 
   it('selects an accepted document file and renders WAIT_FOR_PROCESSING', () => {

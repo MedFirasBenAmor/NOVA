@@ -124,7 +124,7 @@ describe('CollectionStrategyService', () => {
     expect(result.type).toBe('ASK_DATAPOINT');
     if (result.type === 'ASK_DATAPOINT') {
       expect(result.datapoint.key).toBe('driver.first_name');
-      expect(result.ui.inputType).toBe('TEXT');
+      expect(result.input.type).toBe('TEXT');
     }
   });
 
@@ -198,13 +198,18 @@ describe('CollectionStrategyService', () => {
       'vehicle.primary_use',
       DataType.ENUM,
       { allowedValues: ['PLEASURE', 'WORK'] },
-      'SINGLE_CHOICE',
-      ['PLEASURE', 'WORK'],
+      {
+        type: 'SINGLE_CHOICE',
+        options: [
+          { value: 'PLEASURE', label: 'Pleasure' },
+          { value: 'WORK', label: 'Work' },
+        ],
+      },
     ],
-    ['vehicle.commercial_use', DataType.BOOLEAN, null, 'YES_NO', undefined],
+    ['vehicle.commercial_use', DataType.BOOLEAN, null, { type: 'YES_NO' }],
   ])(
-    'derives UI semantics for %s from the catalog',
-    async (key, dataType, validationRules, inputType, options) => {
+    'derives input semantics for %s from the catalog',
+    async (key, dataType, validationRules, input) => {
       const entityId = '00000000-0000-4000-8000-000000000003';
       const { service } = setup(
         [],
@@ -232,7 +237,7 @@ describe('CollectionStrategyService', () => {
       if (result.type === 'ASK_DATAPOINT')
         expect(result).toMatchObject({
           datapoint: { key, entityId },
-          ui: { inputType, ...(options ? { options } : {}) },
+          input,
         });
     },
   );
