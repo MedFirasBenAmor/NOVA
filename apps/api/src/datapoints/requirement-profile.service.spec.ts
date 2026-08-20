@@ -102,6 +102,8 @@ describe('RequirementProfileService catalog contract', () => {
     const source = seed();
     expect(source).toContain("allowedValues: ['NEW', 'USED', 'DEMO']");
     expect(source).toContain("allowedValues: ['OWNER', 'TENANT', 'LANDLORD']");
+    expect(source).toContain('BUNDLE_POLICIES');
+    expect(source).toContain('TENANT_OCCUPANT');
     expect(
       buildInputContract({
         key: 'test.boolean',

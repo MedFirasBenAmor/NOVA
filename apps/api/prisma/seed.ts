@@ -309,6 +309,18 @@ const common: Definition[] = [
       requirementType: RequirementType.OPTIONAL,
       possibleSources: commonSources,
       preferredCollectionMethods: commonMethods,
+      validationRules: {
+        allowedValues: [
+          'OTHER_SITUATION',
+          'TENANT_OCCUPANT',
+          'OWNER_OCCUPANT',
+        ],
+        labels: {
+          OTHER_SITUATION: 'Autre situation',
+          TENANT_OCCUPANT: 'Locataire occupant',
+          OWNER_OCCUPANT: 'Propriétaire occupant',
+        },
+      },
     },
   ),
   definition(
@@ -319,10 +331,25 @@ const common: Definition[] = [
       product: Product.COMMON,
       category: 'REQUEST',
       entityType: EntityType.REQUEST,
-      dataType: DataType.STRING,
+      dataType: DataType.ENUM,
       requirementType: RequirementType.REQUIRED,
       possibleSources: commonSources,
       preferredCollectionMethods: commonMethods,
+      validationRules: {
+        allowedValues: [
+          'BUNDLE_POLICIES',
+          'RENEWAL',
+          'NEW_ACQUISITION',
+          'MIXED_NEW_ACQUISITION_AND_RENEWAL',
+        ],
+        labels: {
+          BUNDLE_POLICIES: 'Regroupement de contrats',
+          RENEWAL: 'Renouvellement',
+          NEW_ACQUISITION: 'Nouvelle acquisition',
+          MIXED_NEW_ACQUISITION_AND_RENEWAL:
+            "Nouvelle acquisition pour un produit et renouvellement pour l'autre",
+        },
+      },
     },
   ),
   definition(

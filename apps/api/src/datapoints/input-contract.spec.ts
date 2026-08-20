@@ -22,13 +22,13 @@ describe('InputContractBuilder', () => {
 
     expect(total).toBe(139);
     expect(boolean).toBe(36);
-    expect(text).toBe(47);
+    expect(text).toBe(46);
     expect(number).toBe(25);
     expect(date).toBe(10);
-    expect(enums).toBe(17);
-    expect(finiteEnums).toBe(14);
+    expect(enums).toBe(18);
+    expect(finiteEnums).toBe(16);
     expect(object).toBe(4);
-    expect(enums - finiteEnums + object).toBe(7);
+    expect(enums - finiteEnums + object).toBe(6);
   });
 
   it('builds deterministic contracts for every supported datatype', () => {

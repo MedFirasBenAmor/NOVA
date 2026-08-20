@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Optional } from '@nestjs/common';
 import {
   CollectionActionType,
   CollectionAttemptStatus,
@@ -23,6 +23,7 @@ import {
 import { EntityLifecycleService } from '../datapoints/entity-lifecycle.service';
 import { SectionReviewService } from '../datapoints/section-review.service';
 import { buildInputContract } from '../datapoints/input-contract';
+import { QuestionSequenceService } from '../datapoints/question-sequence.service';
 
 @Injectable()
 export class CollectionStrategyService {
@@ -52,6 +53,8 @@ export class CollectionStrategyService {
     private readonly profiles: RequirementProfileService,
     private readonly entities: EntityLifecycleService,
     private readonly reviews?: SectionReviewService,
+    @Optional()
+    private readonly sequence?: QuestionSequenceService,
   ) {}
 
   async select(
@@ -71,6 +74,9 @@ export class CollectionStrategyService {
         take: 1,
       }),
     ]);
+    const orderedMissing = this.sequence
+      ? this.sequence.orderedMissing(product, definitions, completeness.missing)
+      : completeness.missing;
     if (documents[0]) {
       return {
         type: 'WAIT_FOR_PROCESSING',
@@ -80,7 +86,7 @@ export class CollectionStrategyService {
           documents[0].status === 'PROCESSING' ? 'PROCESSING' : 'UPLOADED',
       };
     }
-    const loopAction = await this.loopAction(leadId, product, completeness);
+    const loopAction = await this.loopAction(leadId, product, orderedMissing);
     if (loopAction) return loopAction;
     if (!completeness.missing.length) {
       const reviewAction = await this.reviews?.nextReviewAction(
@@ -113,13 +119,21 @@ export class CollectionStrategyService {
     )
       .map((cap) => ({
         cap,
-        covered: completeness.missing.filter(
+        covered: orderedMissing.filter(
           (m) =>
             m.entityType === cap.entityType &&
             cap.providesDatapoints.includes(m.key),
         ),
       }))
       .filter(({ covered }) => covered.length >= 2)
+      .filter(({ cap }) =>
+        this.sequence
+          ? this.sequence.shouldConsiderDocumentForNextMissing(
+              orderedMissing,
+              cap.entityType,
+            )
+          : true,
+      )
       .sort((a, b) => a.cap.priority - b.cap.priority)[0];
     const accepted = attempts.find(
       (attempt) =>
@@ -131,7 +145,7 @@ export class CollectionStrategyService {
         (candidate) => candidate.id === accepted.capabilityId,
       );
       const covered = cap
-        ? completeness.missing.filter(
+        ? orderedMissing.filter(
             (item) =>
               item.entityType === cap.entityType &&
               cap.providesDatapoints.includes(item.key),
@@ -204,13 +218,11 @@ export class CollectionStrategyService {
         )?.capabilityId,
     );
     const item =
-      completeness.missing.find((missing) =>
+      orderedMissing.find((missing) =>
         lastDeclinedCapability?.providesDatapoints.includes(missing.key),
       ) ??
-      completeness.missing.find(
-        (missing) => missing.reason === 'CONDITIONAL',
-      ) ??
-      completeness.missing[0];
+      orderedMissing.find((missing) => missing.reason === 'CONDITIONAL') ??
+      orderedMissing[0];
     const definition = definitions.find((d) => d.key === item.key);
     if (!definition)
       throw new NotFoundException(`Definition not found for ${item.key}`);
@@ -346,13 +358,13 @@ export class CollectionStrategyService {
   private async loopAction(
     leadId: string,
     product: SelectedProduct,
-    completeness: CompletenessResponse,
+    orderedMissing: CompletenessResponse['missing'],
   ): Promise<NextAction | undefined> {
     const loops = await this.entities.openLoopsForLead(leadId);
     for (const loop of loops) {
       const currentEntity = await this.currentLoopEntity(leadId, loop);
       if (!currentEntity) continue;
-      const missing = completeness.missing.find(
+      const missing = orderedMissing.find(
         (item) => item.entityId === currentEntity.id,
       );
       if (missing) {

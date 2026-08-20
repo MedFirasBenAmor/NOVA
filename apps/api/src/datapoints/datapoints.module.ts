@@ -4,6 +4,7 @@ import { DatapointsService } from './datapoints.service';
 import { RequirementProfileService } from './requirement-profile.service';
 import { EntityLifecycleService } from './entity-lifecycle.service';
 import { SectionReviewService } from './section-review.service';
+import { QuestionSequenceService } from './question-sequence.service';
 
 @Module({
   controllers: [DatapointsController],
@@ -12,12 +13,14 @@ import { SectionReviewService } from './section-review.service';
     RequirementProfileService,
     EntityLifecycleService,
     SectionReviewService,
+    QuestionSequenceService,
   ],
   exports: [
     DatapointsService,
     RequirementProfileService,
     EntityLifecycleService,
     SectionReviewService,
+    QuestionSequenceService,
   ],
 })
 export class DatapointsModule {}
