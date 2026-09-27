@@ -1,26 +1,114 @@
 @import 'tailwindcss';
 
+/* ============================================================
+   NOVA design tokens
+   Premium InsurTech — white surfaces, navy type, blue actions
+   ============================================================ */
+@theme {
+  --color-nova-navy: #071552;
+  --color-nova-blue: #1677ff;
+  --color-nova-blue-strong: #0f5fd6;
+  --color-nova-blue-light: #eaf3ff;
+  --color-nova-bg: #ffffff;
+  --color-nova-surface: #ffffff;
+  --color-nova-surface-secondary: #f7f9fc;
+  --color-nova-border: #e5eaf2;
+  --color-nova-ink: #071552;
+  --color-nova-muted: #5d6685;
+  --color-nova-success: #22a65a;
+  --color-nova-success-bg: #edf9f2;
+  --color-nova-purple: #9b46e5;
+  --color-nova-purple-bg: #f6eefe;
+  --color-nova-orange: #ff8a4c;
+  --color-nova-orange-bg: #fff3ea;
+
+  --radius-token-sm: 0.75rem; /* 12 */
+  --radius-token: 1rem; /* 16 */
+  --radius-token-lg: 1.25rem; /* 20 */
+
+  --shadow-token-sm: 0 1px 2px rgba(7, 21, 82, 0.04), 0 2px 8px rgba(7, 21, 82, 0.04);
+  --shadow-token: 0 4px 16px rgba(7, 21, 82, 0.06), 0 1px 3px rgba(7, 21, 82, 0.04);
+  --shadow-token-lg: 0 12px 40px rgba(7, 21, 82, 0.10), 0 2px 8px rgba(7, 21, 82, 0.05);
+}
+
 :root {
   color-scheme: light;
-  --background: #f6f7f4;
-  --foreground: #17201b;
+  --background: #ffffff;
+  --foreground: #071552;
   --surface: #ffffff;
-  --border: #dce2dd;
-  --accent: #167052;
+  --surface-secondary: #f7f9fc;
+  --border: #e5eaf2;
+  --accent: #1677ff;
+  --muted: #5d6685;
 }
 
 * {
   box-sizing: border-box;
 }
 
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
 body {
   margin: 0;
+  min-height: 100dvh;
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-inter), 'Inter', system-ui, -apple-system,
+    'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-feature-settings: 'cv11', 'ss01';
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 a {
   color: inherit;
   text-decoration: none;
+}
+
+/* Mobile keyboards / notches */
+.safe-bottom {
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+}
+
+/* Thin, restrained scrollbars */
+.nova-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+.nova-scroll::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.nova-scroll::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 9999px;
+}
+
+/* Equalizer bars for the voice experience */
+@keyframes nova-equalize {
+  0%, 100% { transform: scaleY(0.35); }
+  50% { transform: scaleY(1); }
+}
+.nova-bar {
+  animation: nova-equalize 1.1s ease-in-out infinite;
+  transform-origin: center;
+}
+
+/* Analysis rows */
+@keyframes nova-row-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+.nova-row-active {
+  animation: nova-row-pulse 1.2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
 }

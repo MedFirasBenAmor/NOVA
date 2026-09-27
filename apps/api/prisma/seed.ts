@@ -58,36 +58,58 @@ type Definition = {
   validationRules?: object;
   riskImpact: ImpactLevel;
   eligibilityImpact: ImpactLevel;
+  appliesToAdditionalEntities: boolean;
   active: boolean;
   version: number;
 };
+
+type DefinitionOptions = Omit<
+  Definition,
+  | 'key'
+  | 'label'
+  | 'description'
+  | 'active'
+  | 'version'
+  | 'riskImpact'
+  | 'eligibilityImpact'
+  | 'appliesToAdditionalEntities'
+> &
+  Partial<
+    Pick<
+      Definition,
+      | 'requiredWhen'
+      | 'validationRules'
+      | 'riskImpact'
+      | 'eligibilityImpact'
+      | 'appliesToAdditionalEntities'
+    >
+  > & {
+    // OPTIONAL datapoints are only manually asked when explicitly flagged.
+    // Without this flag the MANUAL_QUESTION collection method is stripped so
+    // the datapoint stays non-blocking and is sourced by extraction/derivation.
+    manuallyAskable?: boolean;
+  };
 
 function definition(
   key: string,
   label: string,
   description: string,
-  options: Omit<
-    Definition,
-    | 'key'
-    | 'label'
-    | 'description'
-    | 'active'
-    | 'version'
-    | 'riskImpact'
-    | 'eligibilityImpact'
-  > &
-    Partial<
-      Pick<
-        Definition,
-        'requiredWhen' | 'validationRules' | 'riskImpact' | 'eligibilityImpact'
-      >
-    >,
+  options: DefinitionOptions,
 ): Definition {
   const {
     riskImpact = ImpactLevel.NONE,
     eligibilityImpact = ImpactLevel.NONE,
+    appliesToAdditionalEntities = true,
+    manuallyAskable = false,
+    preferredCollectionMethods,
     ...rest
   } = options;
+  const methods =
+    rest.requirementType === RequirementType.OPTIONAL && !manuallyAskable
+      ? (preferredCollectionMethods ?? []).filter(
+          (method) => method !== CollectionMethod.MANUAL_QUESTION,
+        )
+      : preferredCollectionMethods;
   return {
     key,
     label,
@@ -96,6 +118,8 @@ function definition(
     version: 1,
     riskImpact,
     eligibilityImpact,
+    appliesToAdditionalEntities,
+    preferredCollectionMethods: methods,
     ...rest,
   };
 }
@@ -155,6 +179,9 @@ const common: Definition[] = [
       requirementType: RequirementType.OPTIONAL,
       possibleSources: commonSources,
       preferredCollectionMethods: commonMethods,
+      validationRules: {
+        allowedValues: ['MALE', 'FEMALE', 'OTHER', 'PREFER_NOT_TO_SAY'],
+      },
     },
   ),
   definition(
@@ -169,6 +196,16 @@ const common: Definition[] = [
       requirementType: RequirementType.OPTIONAL,
       possibleSources: commonSources,
       preferredCollectionMethods: commonMethods,
+      validationRules: {
+        allowedValues: [
+          'SINGLE',
+          'MARRIED',
+          'COMMON_LAW',
+          'SEPARATED',
+          'DIVORCED',
+          'WIDOWED',
+        ],
+      },
     },
   ),
   definition(
@@ -181,6 +218,20 @@ const common: Definition[] = [
       entityType: EntityType.CUSTOMER,
       dataType: DataType.STRING,
       requirementType: RequirementType.OPTIONAL,
+      possibleSources: commonSources,
+      preferredCollectionMethods: commonMethods,
+    },
+  ),
+  definition(
+    'customer.has_criminal_record',
+    'Avez-vous un dossier criminel',
+    'Whether the customer has a criminal record.',
+    {
+      product: Product.COMMON,
+      category: 'CUSTOMER',
+      entityType: EntityType.CUSTOMER,
+      dataType: DataType.BOOLEAN,
+      requirementType: RequirementType.REQUIRED,
       possibleSources: commonSources,
       preferredCollectionMethods: commonMethods,
     },
@@ -782,6 +833,7 @@ const auto: Definition[] = [
       requirementType: RequirementType.OPTIONAL,
       possibleSources: autoSources,
       preferredCollectionMethods: autoMethods,
+      manuallyAskable: true,
     },
   ),
   definition(
@@ -796,6 +848,7 @@ const auto: Definition[] = [
       requirementType: RequirementType.OPTIONAL,
       possibleSources: autoSources,
       preferredCollectionMethods: autoMethods,
+      manuallyAskable: true,
     },
   ),
   definition(
@@ -1006,6 +1059,8 @@ type CompactDefinition = {
   requirementType: RequirementType;
   requiredWhen?: object;
   validationRules?: object;
+  appliesToAdditionalEntities?: boolean;
+  manuallyAskable?: boolean;
 };
 
 function compactDefinition(item: CompactDefinition): Definition {
@@ -1021,6 +1076,8 @@ function compactDefinition(item: CompactDefinition): Definition {
     preferredCollectionMethods: methods,
     ...(item.requiredWhen ? { requiredWhen: item.requiredWhen } : {}),
     ...(item.validationRules ? { validationRules: item.validationRules } : {}),
+    appliesToAdditionalEntities: item.appliesToAdditionalEntities ?? true,
+    ...(item.manuallyAskable ? { manuallyAskable: true } : {}),
   });
 }
 
@@ -1061,6 +1118,7 @@ const autoR1: Definition[] = [
     entityType: EntityType.VEHICLE,
     dataType: DataType.BOOLEAN,
     requirementType: RequirementType.OPTIONAL,
+    manuallyAskable: true,
   }),
   compactDefinition({
     key: 'driver.training_completed',
@@ -1087,7 +1145,14 @@ const autoR1: Definition[] = [
     category: 'CURRENT_AUTO_INSURANCE',
     entityType: EntityType.CUSTOMER,
     dataType: DataType.DATE,
-    requirementType: RequirementType.REQUIRED,
+    // Only relevant for renewal / bundle flows; a first-time buyer has no
+    // prior policy to expire.
+    requirementType: RequirementType.CONDITIONAL,
+    requiredWhen: {
+      key: 'request.type',
+      operator: 'IN',
+      value: ['RENEWAL', 'BUNDLE_POLICIES', 'MIXED_NEW_ACQUISITION_AND_RENEWAL'],
+    },
   }),
   compactDefinition({
     key: 'auto.liability_limit_requested',
@@ -1096,7 +1161,14 @@ const autoR1: Definition[] = [
     category: 'AUTO_COVERAGE',
     entityType: EntityType.CUSTOMER,
     dataType: DataType.NUMBER,
-    requirementType: RequirementType.REQUIRED,
+    // Only meaningful when the customer is renewing or bundling an existing
+    // policy they want matched.
+    requirementType: RequirementType.CONDITIONAL,
+    requiredWhen: {
+      key: 'request.type',
+      operator: 'IN',
+      value: ['RENEWAL', 'BUNDLE_POLICIES', 'MIXED_NEW_ACQUISITION_AND_RENEWAL'],
+    },
   }),
   compactDefinition({
     key: 'vehicle.multi_vehicle_policy_requested',
@@ -1105,7 +1177,9 @@ const autoR1: Definition[] = [
     category: 'AUTO_COVERAGE',
     entityType: EntityType.VEHICLE,
     dataType: DataType.BOOLEAN,
-    requirementType: RequirementType.REQUIRED,
+    // Retained for compatibility only. The multi-vehicle loop is Phase 2, so
+    // the question is not asked and creates no second vehicle for now.
+    requirementType: RequirementType.OPTIONAL,
   }),
 ];
 

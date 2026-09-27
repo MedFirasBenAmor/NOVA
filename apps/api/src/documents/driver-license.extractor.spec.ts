@@ -1,7 +1,7 @@
 import { DriverLicenseExtractor } from './driver-license.extractor';
 
 describe('DriverLicenseExtractor', () => {
-  it('extracts only evidence-backed name and birth date fields', () => {
+  it('extracts only evidence-backed driver license fields', () => {
     const candidates = new DriverLicenseExtractor().extract({
       textBlocks: [
         { text: 'SURNAME: TREMBLAY', confidence: 0.99, page: 1 },
@@ -15,10 +15,8 @@ describe('DriverLicenseExtractor', () => {
       'driver.first_name',
       'driver.date_of_birth',
     ]);
-    expect(candidates).not.toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ key: 'driver.license_type' }),
-      ]),
+    expect(candidates).not.toContainEqual(
+      expect.objectContaining({ key: 'driver.license_type' }),
     );
   });
 });

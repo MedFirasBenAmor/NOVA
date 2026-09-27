@@ -19,6 +19,11 @@ import {
 } from '../datapoints/requirement-profile.service';
 import { ConversationsService } from '../conversations/conversations.service';
 import { CollectionStrategyService } from './collection-strategy.service';
+import { COLLECTION_CAPABILITIES } from './collection-capabilities';
+
+const currentAutoPolicyCapability = COLLECTION_CAPABILITIES.find(
+  (capability) => capability.id === 'CURRENT_AUTO_POLICY_FULL',
+)!;
 
 type IntakeLead = Pick<
   Lead,
@@ -86,6 +91,10 @@ export class IntakeOrchestratorService {
       await this.ensurePhase(lead, expected.phase);
       return this.ensureAttempt(leadId, lead.selectedProduct, expected);
     }
+
+    const policyDocumentAction =
+      await this.currentAutoPolicyDocumentAction(lead);
+    if (policyDocumentAction) return policyDocumentAction;
 
     if (lead.intakePhase !== IntakePhase.CORE_DATA_COLLECTION) {
       await this.prisma.lead.update({
@@ -198,6 +207,30 @@ export class IntakeOrchestratorService {
     return this.currentAction(leadId);
   }
 
+  async inferCurrentInsuranceFromRenewal(
+    leadId: string,
+    domain: ProductDomain,
+  ) {
+    const lead = await this.lead(leadId);
+    if (
+      !lead.selectedProduct ||
+      !this.requiresDomain(lead.selectedProduct, domain)
+    )
+      return;
+    if (domain === 'AUTO' && lead.currentAutoInsured === null) {
+      await this.prisma.lead.update({
+        where: { id: leadId },
+        data: { currentAutoInsured: true },
+      });
+    }
+    if (domain === 'HOME' && lead.currentHomeInsured === null) {
+      await this.prisma.lead.update({
+        where: { id: leadId },
+        data: { currentHomeInsured: true },
+      });
+    }
+  }
+
   private expectedIntakeAction(
     lead: IntakeLead,
   ): ExpectedIntakeAction | undefined {
@@ -249,6 +282,72 @@ export class IntakeOrchestratorService {
       (domain === 'AUTO' && product === Product.AUTO) ||
       (domain === 'HOME' && product === Product.HOME)
     );
+  }
+
+  private async currentAutoPolicyDocumentAction(
+    lead: IntakeLead,
+  ): Promise<NextAction | undefined> {
+    if (
+      !lead.selectedProduct ||
+      !this.requiresDomain(lead.selectedProduct, 'AUTO') ||
+      lead.currentAutoInsured !== true ||
+      lead.currentAutoPolicyAvailable !== true
+    )
+      return undefined;
+
+    const attempts = await this.prisma.collectionAttempt.findMany({
+      where: {
+        leadId: lead.id,
+        capabilityId: currentAutoPolicyCapability.id,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    const terminalStatuses: CollectionAttemptStatus[] = [
+      CollectionAttemptStatus.COMPLETED,
+      CollectionAttemptStatus.DECLINED,
+      CollectionAttemptStatus.SKIPPED,
+    ];
+    const terminal = attempts.find((attempt) =>
+      terminalStatuses.includes(attempt.status),
+    );
+    if (terminal) return undefined;
+    const reusableStatuses: CollectionAttemptStatus[] = [
+      CollectionAttemptStatus.PROPOSED,
+      CollectionAttemptStatus.ACCEPTED,
+    ];
+    const reusable = attempts.find((attempt) =>
+      reusableStatuses.includes(attempt.status),
+    );
+    const attempt =
+      reusable ??
+      (await this.prisma.collectionAttempt.create({
+        data: {
+          leadId: lead.id,
+          actionType: CollectionActionType.SUGGEST_FULL_DOCUMENT,
+          capabilityId: currentAutoPolicyCapability.id,
+          documentType: currentAutoPolicyCapability.documentType,
+          entityType: currentAutoPolicyCapability.entityType,
+          product: lead.selectedProduct,
+          metadata: {
+            productDomain: 'AUTO',
+            coveredMissingDatapoints:
+              currentAutoPolicyCapability.providesDatapoints,
+          },
+        },
+      }));
+    return {
+      type: 'SUGGEST_FULL_DOCUMENT',
+      actionId: attempt.id,
+      documentType: currentAutoPolicyCapability.documentType,
+      entityType: currentAutoPolicyCapability.entityType,
+      coveredMissingDatapoints: currentAutoPolicyCapability.providesDatapoints,
+      questionsPotentiallyAvoided:
+        currentAutoPolicyCapability.providesDatapoints.length,
+      required: false,
+      ...(attempt.status === CollectionAttemptStatus.ACCEPTED
+        ? { accepted: true }
+        : {}),
+    };
   }
 
   private async ensureAttempt(

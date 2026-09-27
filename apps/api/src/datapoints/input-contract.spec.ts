@@ -20,15 +20,15 @@ describe('InputContractBuilder', () => {
     const finiteEnums = count(/allowedValues:/g);
     const object = count(/dataType: DataType\.OBJECT/g);
 
-    expect(total).toBe(139);
-    expect(boolean).toBe(36);
+    expect(total).toBe(140);
+    expect(boolean).toBe(37);
     expect(text).toBe(46);
     expect(number).toBe(25);
     expect(date).toBe(10);
     expect(enums).toBe(18);
-    expect(finiteEnums).toBe(16);
+    expect(finiteEnums).toBe(18);
     expect(object).toBe(4);
-    expect(enums - finiteEnums + object).toBe(6);
+    expect(enums - finiteEnums + object).toBe(4);
   });
 
   it('builds deterministic contracts for every supported datatype', () => {
@@ -156,5 +156,51 @@ describe('InputContractBuilder', () => {
         '12',
       ),
     ).toThrow();
+  });
+
+  it('exposes an OBJECT datapoint with supportedCodes as a multi-choice contract', () => {
+    const contract = buildInputContract({
+      key: 'vehicle.requested_coverages',
+      dataType: DataType.OBJECT,
+      validationRules: {
+        supportedCodes: ['collision', 'comprehensive', 'liability'],
+      },
+    });
+    expect(contract.type).toBe('MULTI_CHOICE');
+    expect(contract).toHaveProperty('options');
+    const options = (contract as { options: { value: string }[] }).options;
+    expect(options.map((option) => option.value)).toEqual([
+      'collision',
+      'comprehensive',
+      'liability',
+    ]);
+  });
+
+  it('validates multi-choice object selections against supportedCodes', () => {
+    const definition = {
+      key: 'vehicle.requested_coverages',
+      dataType: DataType.OBJECT,
+      validationRules: {
+        supportedCodes: ['collision', 'comprehensive', 'liability'],
+      },
+    };
+    expect(() =>
+      validateValueAgainstInputContract(definition, ['collision', 'liability']),
+    ).not.toThrow();
+    expect(() =>
+      validateValueAgainstInputContract(definition, ['collision', 'gap']),
+    ).toThrow();
+    expect(() =>
+      validateValueAgainstInputContract(definition, 'collision'),
+    ).toThrow();
+  });
+
+  it('flags an OBJECT datapoint without supportedCodes as business validation', () => {
+    const contract = buildInputContract({
+      key: 'vehicle.requested_coverages',
+      dataType: DataType.OBJECT,
+      validationRules: null,
+    });
+    expect(contract.type).toBe('BUSINESS_VALIDATION_REQUIRED');
   });
 });

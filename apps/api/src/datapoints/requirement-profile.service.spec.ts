@@ -28,17 +28,17 @@ const keysFor = (product: Product) => {
 
 describe('RequirementProfileService catalog contract', () => {
   it('matches exact R1 catalog counts and requirement breakdown', () => {
-    expect(productCount(Product.COMMON)).toBe(20);
+    expect(productCount(Product.COMMON)).toBe(21);
     expect(productCount(Product.AUTO)).toBe(48);
     expect(productCount(Product.HOME)).toBe(71);
     expect(
       productCount(Product.COMMON) +
         productCount(Product.AUTO) +
         productCount(Product.HOME),
-    ).toBe(139);
-    expect(requirementCount(RequirementType.REQUIRED)).toBe(79);
-    expect(requirementCount(RequirementType.OPTIONAL)).toBe(34);
-    expect(requirementCount(RequirementType.CONDITIONAL)).toBe(26);
+    ).toBe(140);
+    expect(requirementCount(RequirementType.REQUIRED)).toBe(77);
+    expect(requirementCount(RequirementType.OPTIONAL)).toBe(35);
+    expect(requirementCount(RequirementType.CONDITIONAL)).toBe(28);
   });
 
   it('keeps canonical keys unique so seed upserts remain idempotent', () => {

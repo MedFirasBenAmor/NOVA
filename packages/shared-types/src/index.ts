@@ -3,7 +3,7 @@ export type HealthResponse = { status: 'ok' };
 export type DatapointProduct = 'COMMON' | 'AUTO' | 'HOME' | 'AUTO_HOME';
 export type SelectableProduct = 'AUTO' | 'HOME' | 'AUTO_HOME';
 export type ProductDomain = 'AUTO' | 'HOME';
-export type MissingReason = 'REQUIRED' | 'CONDITIONAL';
+export type MissingReason = 'REQUIRED' | 'CONDITIONAL' | 'OPTIONAL';
 
 export type CompletenessItem = {
   key: string;
@@ -85,12 +85,19 @@ export type IntelligenceEntityType =
   | 'CO_APPLICANT'
   | 'REQUEST';
 
+export type EntityRelationType =
+  | 'DRIVER_VEHICLE_PRIMARY'
+  | 'DRIVER_VEHICLE_OCCASIONAL'
+  | 'CLAIM_DRIVER'
+  | 'CLAIM_VEHICLE';
+
 export type IntelligenceCatalogItem = {
   key: string;
   label: string;
   dataType: string;
   entityType: IntelligenceEntityType;
   allowedValues?: unknown[];
+  labels?: Record<string, string>;
 };
 
 export type IntelligenceKnownDatapoint = {
@@ -106,7 +113,15 @@ export type IntelligenceInput = {
   entityContext?: {
     vehicleId?: string;
     driverId?: string;
+    propertyId?: string;
     claimId?: string;
+    coApplicantId?: string;
+    currentDatapoint?: {
+      key: string;
+      label?: string;
+      entityType: IntelligenceEntityType;
+      entityId?: string;
+    };
   };
   knownDatapoints: IntelligenceKnownDatapoint[];
   catalog: IntelligenceCatalogItem[];
@@ -161,6 +176,7 @@ export type NextAction =
         key: string;
         entityType: IntelligenceEntityType;
         entityId?: string;
+        entityLabel?: string;
         label?: string;
         description?: string;
       };
@@ -169,11 +185,13 @@ export type NextAction =
   | {
       type: 'ASK_GROUPED_DATAPOINTS';
       actionId: string;
+      title?: string;
       datapoints: Array<{
         key: string;
         entityType: IntelligenceEntityType;
         entityId?: string;
         label?: string;
+        input?: InputContract;
       }>;
     }
   | {
@@ -222,6 +240,26 @@ export type NextAction =
       label?: string;
       question: string;
       input: { type: 'YES_NO' };
+    }
+  | {
+      type: 'ASSIGN_ENTITY_RELATION';
+      actionId: string;
+      relationType: Extract<
+        EntityRelationType,
+        'DRIVER_VEHICLE_PRIMARY' | 'DRIVER_VEHICLE_OCCASIONAL'
+      >;
+      prompt:
+        | 'PRIMARY_DRIVER'
+        | 'OCCASIONAL_DRIVER_EXISTS'
+        | 'OCCASIONAL_DRIVER_SELECT';
+      sourceEntityType: 'DRIVER';
+      targetEntityType: 'VEHICLE';
+      targetEntityId: string;
+      vehicleOrdinal: number;
+      vehicleLabel: string;
+      question: string;
+      options?: Array<{ entityId: string; label: string }>;
+      input: { type: 'SINGLE_CHOICE' } | { type: 'YES_NO' };
     }
   | {
       type: 'REVIEW_SECTION';

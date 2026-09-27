@@ -27,7 +27,8 @@ import { AuthModule } from './auth/auth.module';
         DATABASE_URL: Joi.string().uri().required(),
         AI_PROVIDER: Joi.string().valid('mock', 'gemini').default('mock'),
         GEMINI_API_KEY: Joi.string().allow('').optional(),
-        GEMINI_MODEL: Joi.string().default('gemini-2.0-flash'),
+        GEMINI_MODEL: Joi.string().default('gemini-3.7-flash'),
+        GEMINI_TIMEOUT_MS: Joi.number().integer().positive().default(30000),
         DOCUMENT_STORAGE_PROVIDER: Joi.string().valid('local').default('local'),
         DOCUMENT_STORAGE_PATH: Joi.string().default('./var/documents'),
         MAX_DOCUMENT_UPLOAD_BYTES: Joi.number()

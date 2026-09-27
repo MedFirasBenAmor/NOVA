@@ -32,16 +32,6 @@ export type ScopedEntityMap = Partial<Record<EntityType, string[]>> & {
   __claimDomains?: Record<string, 'AUTO' | 'HOME'>;
 };
 
-export const additionalDriverRequiredKeys = new Set([
-  'driver.first_name',
-  'driver.last_name',
-  'driver.date_of_birth',
-  'driver.relationship_to_proposer',
-  'driver.occupation',
-  'driver.license_type',
-  'driver.driving_start_year_quebec',
-]);
-
 export const coApplicantRequiredKeys = [
   'co_applicant.civility',
   'co_applicant.first_name',
@@ -301,7 +291,9 @@ export class EntityLifecycleService {
         entity.entityType === EntityType.CLAIM ||
         entity.entityType === EntityType.CO_APPLICANT ||
         (entity.entityType === EntityType.DRIVER &&
-          entity.role === EntityRole.ADDITIONAL)
+          entity.role === EntityRole.ADDITIONAL) ||
+        (entity.entityType === EntityType.VEHICLE &&
+          entity.role === EntityRole.REPEATABLE)
       ) {
         result[entity.entityType] = [
           ...(result[entity.entityType] ?? []),
@@ -408,6 +400,58 @@ export class EntityLifecycleService {
       domain: EntityDomain.AUTO,
       ordinal: 2,
       triggerKey: 'auto.additional_driver_exists',
+    });
+  }
+
+  ensureVehicleLoop(leadId: string) {
+    return this.prisma.$transaction(async (tx) => {
+      const folder = await this.folderForLead(tx, leadId);
+      const loop = await tx.collectionLoop.upsert({
+        where: {
+          customerFolderId_entityType_role_domain: {
+            customerFolderId: folder.id,
+            entityType: EntityType.VEHICLE,
+            role: EntityRole.REPEATABLE,
+            domain: EntityDomain.AUTO,
+          },
+        },
+        update: {},
+        create: {
+          customerFolderId: folder.id,
+          entityType: EntityType.VEHICLE,
+          role: EntityRole.REPEATABLE,
+          domain: EntityDomain.AUTO,
+          currentOrdinal: 1,
+          triggerKey: 'auto.multi_vehicle_loop',
+        },
+      });
+      if (loop.status !== CollectionLoopStatus.CLOSED) {
+        await this.ensurePrimaryEntityWithDb(tx, leadId, EntityType.VEHICLE);
+      }
+      return loop;
+    });
+  }
+
+  async ensureVehicleEntity(leadId: string, ordinal: number) {
+    const folder = await this.folderForLead(this.prisma, leadId);
+    return this.ensureLoopEntityWithDb(this.prisma, folder, {
+      entityType: EntityType.VEHICLE,
+      role: EntityRole.REPEATABLE,
+      domain: EntityDomain.AUTO,
+      ordinal,
+    });
+  }
+
+  vehicleEntitiesForLead(leadId: string) {
+    return this.prisma.$transaction(async (tx) => {
+      const folder = await this.folderForLead(tx, leadId);
+      return tx.dossierEntity.findMany({
+        where: {
+          customerFolderId: folder.id,
+          entityType: EntityType.VEHICLE,
+        },
+        orderBy: [{ role: 'asc' }, { ordinal: 'asc' }],
+      });
     });
   }
 

@@ -1,11 +1,54 @@
 import type {
   CompletenessResponse,
+  IntelligenceInput,
   IntelligenceResult,
   NextAction,
   SelectableProduct,
 } from '@nova/shared-types';
 
-const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://127.0.0.1:3001';
+
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+  }
+}
+
+function errorMessage(body: unknown, fallback: string) {
+  if (!body || typeof body !== 'object') return fallback;
+  const message = (body as { message?: unknown }).message;
+  if (typeof message === 'string') return message;
+  if (Array.isArray(message)) {
+    const parts = message
+      .map((item) => {
+        if (typeof item === 'string') return item;
+        if (item && typeof item === 'object') {
+          const constraints = (item as { constraints?: unknown }).constraints;
+          if (constraints && typeof constraints === 'object')
+            return Object.values(constraints).filter(
+              (value): value is string => typeof value === 'string',
+            );
+        }
+        return undefined;
+      })
+      .flat()
+      .filter(Boolean);
+    if (parts.length) return parts.join(' ');
+  }
+  if (message && typeof message === 'object') {
+    const constraints = (message as { constraints?: unknown }).constraints;
+    if (constraints && typeof constraints === 'object') {
+      const parts = Object.values(constraints).filter(
+        (value): value is string => typeof value === 'string',
+      );
+      if (parts.length) return parts.join(' ');
+    }
+  }
+  return fallback;
+}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${baseUrl}${path}`, {
@@ -15,7 +58,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
   if (!response.ok) {
     const body = await response.json().catch(() => null);
-    throw new Error(body?.message ?? `Request failed (${response.status})`);
+    throw new ApiError(
+      errorMessage(body, `Request failed (${response.status})`),
+      response.status,
+    );
   }
   return response.json() as Promise<T>;
 }
@@ -54,10 +100,17 @@ export const api = {
     request<{ messages: ConversationMessage[] }>(
       `/leads/${leadId}/conversation`,
     ),
-  interaction: (leadId: string, message: string) =>
+  interaction: (
+    leadId: string,
+    message: string,
+    entityContext?: IntelligenceInput['entityContext'],
+  ) =>
     request<InteractionResponse>(`/leads/${leadId}/interactions`, {
       method: 'POST',
-      body: JSON.stringify({ message }),
+      body: JSON.stringify({
+        message,
+        ...(entityContext ? { entityContext } : {}),
+      }),
     }),
   selectProduct: (leadId: string, product: SelectableProduct) =>
     request<{ selectedProduct: SelectableProduct; nextAction: NextAction }>(
@@ -111,7 +164,10 @@ export const api = {
     });
     if (!response.ok) {
       const body = await response.json().catch(() => null);
-      throw new Error(body?.message ?? `Upload failed (${response.status})`);
+      throw new ApiError(
+        errorMessage(body, `Upload failed (${response.status})`),
+        response.status,
+      );
     }
     return response.json() as Promise<DocumentUploadResponse>;
   },

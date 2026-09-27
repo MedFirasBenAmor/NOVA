@@ -4,6 +4,28 @@ import {
   DocumentType,
 } from '@prisma/client';
 import { DocumentProcessorService } from './document-processor.service';
+import type { DocumentStorageProvider } from './document-storage.provider';
+import type { OcrProvider } from './ocr/ocr.provider';
+
+const createStorageMock = (): DocumentStorageProvider => ({
+  read: jest.fn().mockResolvedValue(Buffer.from('synthetic')),
+  store: jest.fn(),
+  delete: jest.fn(),
+  exists: jest.fn(),
+});
+
+const createOcrMock = (): OcrProvider => ({
+  name: 'mock',
+  recognize: jest.fn().mockResolvedValue({
+    textBlocks: [
+      { text: 'SURNAME: TREMBLAY', confidence: 0.99, page: 1 },
+      { text: 'GIVEN NAME: ALEX', confidence: 0.99, page: 1 },
+      { text: 'DOB: 1990-05-17', confidence: 0.98, page: 1 },
+    ],
+    provider: 'mock',
+    processingMs: 9,
+  }),
+});
 
 describe('DocumentProcessorService', () => {
   it('processes a driver license, preserves provenance, and is idempotent', async () => {
@@ -106,8 +128,8 @@ describe('DocumentProcessorService', () => {
         auditEvent: { create: jest.fn().mockResolvedValue({}) },
       } as never,
       {} as never,
-      {} as never,
-      { name: 'mock', recognize: jest.fn() },
+      createStorageMock(),
+      createOcrMock(),
       {
         assertOwnedEntityType: jest
           .fn()
@@ -139,8 +161,8 @@ describe('DocumentProcessorService', () => {
         auditEvent: { create: jest.fn().mockResolvedValue({}) },
       } as never,
       {} as never,
-      {} as never,
-      { name: 'mock', recognize: jest.fn() },
+      createStorageMock(),
+      createOcrMock(),
       { assertOwnedEntityType: jest.fn().mockResolvedValue({}) } as never,
     );
     await expect(service.process(document.id)).rejects.toThrow(

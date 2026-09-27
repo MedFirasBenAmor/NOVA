@@ -34,5 +34,6 @@ import { MockIntelligenceProvider } from './providers/mock-intelligence.provider
         config.get<string>('AI_PROVIDER', 'mock') === 'gemini' ? gemini : mock,
     },
   ],
+  exports: [INTELLIGENCE_PROVIDER],
 })
 export class IntelligenceModule {}

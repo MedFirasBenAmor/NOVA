@@ -78,9 +78,10 @@ export class DatapointsService {
 
       const folder = await this.folderForLead(tx, leadId);
       const selectedProduct = await this.profiles.selectedForLead(leadId);
-      if (!selectedProduct)
+      if (!selectedProduct && definition.product !== Product.COMMON)
         throw new BadRequestException('Product must be selected first');
-      await this.validateProfileDefinition(selectedProduct, definition);
+      if (selectedProduct)
+        await this.validateProfileDefinition(selectedProduct, definition);
       this.validateInput(definition, dto);
       const entityType = dto.entityType ?? definition.entityType;
       await this.validateEntityScope(leadId, definition, dto.entityId);

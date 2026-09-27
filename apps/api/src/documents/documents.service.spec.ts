@@ -20,6 +20,14 @@ const file: UploadFile = {
   mimetype: 'image/jpeg',
   size: 4,
 };
+const heicFile: UploadFile = {
+  buffer: Buffer.from([
+    0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70, 0x68, 0x65, 0x69, 0x63,
+  ]),
+  originalname: 'licence.heic',
+  mimetype: 'image/heic',
+  size: 12,
+};
 
 function setup(
   overrides: Partial<{
@@ -196,6 +204,55 @@ describe('DocumentsService', () => {
     });
     expect(result.document.collectionMode).toBe('TARGETED_CAPTURE');
     expect(result.metrics.targetedCaptureUploads).toBe(1);
+  });
+
+  it.each([
+    [
+      'PNG',
+      {
+        buffer: Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+        originalname: 'licence.png',
+        mimetype: 'image/png',
+        size: 8,
+      },
+    ],
+    [
+      'JPG',
+      {
+        buffer: Buffer.from([0xff, 0xd8, 0xff, 0x00]),
+        originalname: 'licence.jpg',
+        mimetype: 'image/jpeg',
+        size: 4,
+      },
+    ],
+    [
+      'JPEG',
+      {
+        buffer: Buffer.from([0xff, 0xd8, 0xff, 0x00]),
+        originalname: 'licence.jpeg',
+        mimetype: 'image/jpeg',
+        size: 4,
+      },
+    ],
+    ['HEIC', heicFile],
+    [
+      'PDF',
+      {
+        buffer: Buffer.from('%PDF-1.7'),
+        originalname: 'licence.pdf',
+        mimetype: 'application/pdf',
+        size: 8,
+      },
+    ],
+  ])('accepts %s uploads', async (_label, acceptedFile) => {
+    const { service } = setup();
+    await expect(
+      service.upload(leadId, acceptedFile, {
+        collectionActionId: actionId,
+      }),
+    ).resolves.toMatchObject({
+      nextAction: { type: 'WAIT_FOR_PROCESSING' },
+    });
   });
 
   it.each([CollectionAttemptStatus.DECLINED, CollectionAttemptStatus.PROPOSED])(

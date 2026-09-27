@@ -12,15 +12,33 @@ export type CollectionCapability = {
 
 export const COLLECTION_CAPABILITIES: CollectionCapability[] = [
   {
+    id: 'CURRENT_AUTO_POLICY_FULL',
+    type: 'FULL_DOCUMENT',
+    documentType: 'CURRENT_AUTO_POLICY',
+    // Every provided datapoint is CUSTOMER-scoped; REQUEST no longer exists as
+    // a dossier entity scope for these fields.
+    entityType: EntityType.CUSTOMER,
+    providesDatapoints: [
+      'auto.current_insurer',
+      'auto.years_with_current_insurer',
+      'auto.prior_policy_expiry_date',
+      'auto.liability_limit_requested',
+    ],
+    priority: 10,
+    consentRequired: true,
+  },
+  {
     id: 'DRIVER_LICENSE_FULL',
     type: 'FULL_DOCUMENT',
     documentType: 'DRIVER_LICENSE',
     entityType: EntityType.DRIVER,
+    // driver.license_type is deliberately excluded: current OCR cannot read it
+    // reliably, so the capability must not promise it. Full licence schema is
+    // Phase 5.
     providesDatapoints: [
       'driver.first_name',
       'driver.last_name',
       'driver.date_of_birth',
-      'driver.license_type',
     ],
     priority: 30,
     consentRequired: true,

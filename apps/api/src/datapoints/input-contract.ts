@@ -6,6 +6,10 @@ type Rules = {
   allowedValues?: unknown[];
   allowMultiple?: boolean;
   labels?: Record<string, string>;
+  // Interim Phase 1 support for structured OBJECT datapoints (e.g. requested
+  // coverages) that carry a closed set of coverage codes. The dedicated
+  // VehicleCoverageLine architecture is Phase 2.
+  supportedCodes?: unknown[];
 };
 
 export type ContractClassification =
@@ -37,9 +41,22 @@ export function buildInputContract(
       ? { type: 'MULTI_CHOICE', options }
       : { type: 'SINGLE_CHOICE', options };
   }
+  if (definition.dataType === DataType.OBJECT) {
+    const options = choiceOptions({
+      ...rules,
+      allowedValues: rules?.supportedCodes,
+    });
+    if (!options.length) {
+      return {
+        type: 'BUSINESS_VALIDATION_REQUIRED',
+        reason: `${definition.key} is OBJECT but has no authoritative supportedCodes`,
+      };
+    }
+    return { type: 'MULTI_CHOICE', options };
+  }
   return {
     type: 'BUSINESS_VALIDATION_REQUIRED',
-    reason: `${definition.key} uses unsupported data type ${definition.dataType}`,
+    reason: `${definition.key} uses unsupported data type ${String(definition.dataType)}`,
   };
 }
 

@@ -14,6 +14,7 @@ import { DocumentWorkerService } from './document-worker.service';
 import { OCR_PROVIDER } from './ocr/ocr.provider';
 import { MockOcrProvider } from './ocr/mock-ocr.provider';
 import { PaddleOcrProvider } from './ocr/paddle-ocr.provider';
+import { IntelligenceModule } from '../intelligence/intelligence.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { PaddleOcrProvider } from './ocr/paddle-ocr.provider';
     PrismaModule,
     DatapointsModule,
     CollectionModule,
+    IntelligenceModule,
     MulterModule.registerAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({

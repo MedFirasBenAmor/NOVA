@@ -1,4 +1,5 @@
 import {
+  CollectionMethod,
   DatapointStatus,
   EntityType,
   Product,
@@ -7,15 +8,19 @@ import {
   type DatapointValue,
   type Prisma,
 } from '@prisma/client';
-import type { CompletenessResponse } from '@nova/shared-types';
-import {
-  additionalDriverRequiredKeys,
-  type ScopedEntityMap,
-} from './entity-lifecycle.service';
+import type { CompletenessResponse, MissingReason } from '@nova/shared-types';
+import { type ScopedEntityMap } from './entity-lifecycle.service';
 
 type Definition = Pick<
   DatapointDefinition,
-  'id' | 'key' | 'product' | 'entityType' | 'requirementType' | 'requiredWhen'
+  | 'id'
+  | 'key'
+  | 'product'
+  | 'entityType'
+  | 'requirementType'
+  | 'requiredWhen'
+  | 'appliesToAdditionalEntities'
+  | 'preferredCollectionMethods'
 >;
 type Value = Pick<
   DatapointValue,
@@ -50,6 +55,12 @@ function isUsable(value: Value | undefined) {
   );
 }
 
+function isManuallyAskable(definition: Definition) {
+  return (definition.preferredCollectionMethods ?? []).includes(
+    CollectionMethod.MANUAL_QUESTION,
+  );
+}
+
 function scopesFor(
   definition: Definition,
   values: Value[],
@@ -68,8 +79,10 @@ function scopesFor(
     }
     if (
       definition.entityType === EntityType.DRIVER &&
-      !additionalDriverRequiredKeys.has(definition.key)
+      !definition.appliesToAdditionalEntities
     ) {
+      // Primary driver only: the datapoint is not applicable to
+      // additional/repeatable driver entities.
       return [canonicalIds[0]];
     }
     return canonicalIds;
@@ -127,11 +140,16 @@ export function resolveCompleteness(
 
   for (const definition of definitions) {
     for (const entityId of scopesFor(definition, values, scopedEntityIds)) {
-      let reason: 'REQUIRED' | 'CONDITIONAL' | undefined;
+      let reason: MissingReason | undefined;
       let triggeredBy: string | undefined;
 
       if (definition.requirementType === RequirementType.REQUIRED) {
         reason = 'REQUIRED';
+      } else if (definition.requirementType === RequirementType.OPTIONAL) {
+        // Controlled askability: an OPTIONAL datapoint only reaches the
+        // customer when the catalog explicitly allows manual questioning.
+        // Otherwise it stays non-blocking and is left to extraction/derivation.
+        reason = isManuallyAskable(definition) ? 'OPTIONAL' : undefined;
       } else if (
         definition.requirementType === RequirementType.CONDITIONAL &&
         definition.requiredWhen
@@ -156,6 +174,20 @@ export function resolveCompleteness(
           value.entityId === (entityId ?? null),
       );
       if (current?.status === DatapointStatus.NOT_APPLICABLE) continue;
+
+      // OPTIONAL askable datapoints are surfaced to the customer but never
+      // block the completeness percentage: they are not counted as required.
+      if (reason === 'OPTIONAL') {
+        if (!isUsable(current)) {
+          missing.push({
+            key: definition.key,
+            entityType: definition.entityType,
+            ...(entityId ? { entityId } : {}),
+            reason,
+          });
+        }
+        continue;
+      }
 
       requiredCount += 1;
       if (isUsable(current)) {

@@ -116,6 +116,11 @@ function setup() {
         );
       }),
       findUniqueOrThrow: jest.fn().mockImplementation(({ where }) => {
+        if (where.id) {
+          const found = entities.find((entity) => entity.id === where.id);
+          if (!found) throw new Error('not found');
+          return Promise.resolve(found);
+        }
         const key = where.customerFolderId_entityType_role_domain_ordinal;
         const found = entities.find(
           (entity) =>
@@ -309,5 +314,123 @@ describe('EntityLifecycleService', () => {
       domain: EntityDomain.HOME,
       ordinal: 1,
     });
+  });
+});
+
+describe('EntityLifecycleService vehicle loop', () => {
+  it('opens the loop against primary Vehicle 1 without creating Vehicle 2', async () => {
+    const { service, loops, entities } = setup();
+    await service.ensureVehicleLoop(leadId);
+    expect(loops).toHaveLength(1);
+    expect(loops[0]).toMatchObject({
+      entityType: EntityType.VEHICLE,
+      role: EntityRole.REPEATABLE,
+      domain: EntityDomain.AUTO,
+      currentOrdinal: 1,
+    });
+    const vehicles = entities.filter(
+      (entity) => entity.entityType === EntityType.VEHICLE,
+    );
+    expect(vehicles).toHaveLength(1);
+    expect(vehicles[0]).toMatchObject({
+      role: EntityRole.PRIMARY,
+      domain: EntityDomain.NONE,
+      ordinal: 1,
+    });
+  });
+
+  it('is idempotent when the vehicle loop already exists', async () => {
+    const { service, loops, entities } = setup();
+    await service.ensureVehicleLoop(leadId);
+    await service.ensureVehicleLoop(leadId);
+    expect(loops).toHaveLength(1);
+    expect(
+      entities.filter((entity) => entity.entityType === EntityType.VEHICLE),
+    ).toHaveLength(1);
+  });
+
+  it('creates Vehicle 2 only after YES and does not duplicate a retried YES', async () => {
+    const { service, loops, entities } = setup();
+    const loop = await service.ensureVehicleLoop(leadId);
+    await service.createNextLoopEntity(
+      leadId,
+      loop.id,
+      '00000000-0000-4000-8000-000000000077',
+    );
+    await service.createNextLoopEntity(
+      leadId,
+      loop.id,
+      '00000000-0000-4000-8000-000000000077',
+    );
+    const vehicles = entities
+      .filter((entity) => entity.entityType === EntityType.VEHICLE)
+      .map((entity) => entity.ordinal)
+      .sort((left, right) => left - right);
+    expect(vehicles).toEqual([1, 2]);
+    expect(loops[0].currentOrdinal).toBe(2);
+    const repeatable = entities.filter(
+      (entity) =>
+        entity.entityType === EntityType.VEHICLE &&
+        entity.role === EntityRole.REPEATABLE,
+    );
+    expect(repeatable).toHaveLength(1);
+    expect(repeatable[0]).toMatchObject({
+      domain: EntityDomain.AUTO,
+      ordinal: 2,
+    });
+  });
+
+  it('creates Vehicle 3 after a second YES', async () => {
+    const { service, loops, entities } = setup();
+    const loop = await service.ensureVehicleLoop(leadId);
+    await service.createNextLoopEntity(
+      leadId,
+      loop.id,
+      '00000000-0000-4000-8000-000000000077',
+    );
+    await service.createNextLoopEntity(
+      leadId,
+      loop.id,
+      '00000000-0000-4000-8000-000000000079',
+    );
+    const vehicles = entities
+      .filter((entity) => entity.entityType === EntityType.VEHICLE)
+      .map((entity) => entity.ordinal)
+      .sort((left, right) => left - right);
+    expect(vehicles).toEqual([1, 2, 3]);
+    expect(loops[0].currentOrdinal).toBe(3);
+  });
+
+  it('closes the vehicle loop without creating another vehicle on NO', async () => {
+    const { service, loops, entities } = setup();
+    const loop = await service.ensureVehicleLoop(leadId);
+    await service.closeCollectionLoop(
+      leadId,
+      loop.id,
+      '00000000-0000-4000-8000-000000000078',
+    );
+    expect(loops[0].status).toBe(CollectionLoopStatus.CLOSED);
+    expect(
+      entities.filter((entity) => entity.entityType === EntityType.VEHICLE),
+    ).toHaveLength(1);
+  });
+
+  it('never recreates the primary vehicle when the loop opens', async () => {
+    const { service, entities } = setup();
+    await service.ensurePrimaryEntity(leadId, EntityType.VEHICLE);
+    await service.ensureVehicleLoop(leadId);
+    const primary = entities.filter(
+      (entity) =>
+        entity.entityType === EntityType.VEHICLE &&
+        entity.role === EntityRole.PRIMARY,
+    );
+    expect(primary).toHaveLength(1);
+    expect(primary[0].ordinal).toBe(1);
+    const repeatable = entities.filter(
+      (entity) =>
+        entity.entityType === EntityType.VEHICLE &&
+        entity.role === EntityRole.REPEATABLE,
+    );
+    expect(repeatable).toHaveLength(0);
   });
 });

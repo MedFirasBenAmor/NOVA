@@ -98,6 +98,7 @@ enum CollectionActionType {
   SUGGEST_TARGETED_CAPTURE
   ASK_DATAPOINT
   ASK_ADD_ANOTHER_ENTITY
+  ASSIGN_ENTITY_RELATION
   REVIEW_SECTION
   ASK_GROUPED_DATAPOINTS
   CONFIRM_DATAPOINT
@@ -139,6 +140,7 @@ model CustomerFolder {
   customerId           String?               @unique @db.Uuid
   customer             Customer?             @relation(fields: [customerId], references: [id], onDelete: Cascade)
   entities             DossierEntity[]
+  entityRelations      EntityRelation[]
   collectionLoops      CollectionLoop[]
   sectionConfirmations SectionConfirmation[]
   datapointValues      DatapointValue[]
@@ -148,18 +150,45 @@ model CustomerFolder {
 }
 
 model DossierEntity {
-  id               String         @id @default(uuid()) @db.Uuid
-  customerFolderId String         @db.Uuid
-  customerFolder   CustomerFolder @relation(fields: [customerFolderId], references: [id], onDelete: Cascade)
+  id               String           @id @default(uuid()) @db.Uuid
+  customerFolderId String           @db.Uuid
+  customerFolder   CustomerFolder   @relation(fields: [customerFolderId], references: [id], onDelete: Cascade)
   entityType       EntityType
   role             EntityRole
-  domain           EntityDomain   @default(NONE)
+  domain           EntityDomain     @default(NONE)
   ordinal          Int
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
+  relationsFrom    EntityRelation[] @relation("EntityRelationFrom")
+  relationsTo      EntityRelation[] @relation("EntityRelationTo")
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
 
   @@unique([customerFolderId, entityType, role, domain, ordinal])
   @@index([customerFolderId, entityType, role, domain])
+}
+
+enum EntityRelationType {
+  DRIVER_VEHICLE_PRIMARY
+  DRIVER_VEHICLE_OCCASIONAL
+  CLAIM_DRIVER
+  CLAIM_VEHICLE
+}
+
+model EntityRelation {
+  id               String             @id @default(uuid()) @db.Uuid
+  customerFolderId String             @db.Uuid
+  customerFolder   CustomerFolder     @relation(fields: [customerFolderId], references: [id], onDelete: Cascade)
+  fromEntityId     String             @db.Uuid
+  fromEntity       DossierEntity      @relation("EntityRelationFrom", fields: [fromEntityId], references: [id], onDelete: Cascade)
+  toEntityId       String             @db.Uuid
+  toEntity         DossierEntity      @relation("EntityRelationTo", fields: [toEntityId], references: [id], onDelete: Cascade)
+  relationType     EntityRelationType
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  @@unique([customerFolderId, fromEntityId, toEntityId, relationType])
+  @@index([customerFolderId, relationType])
+  @@index([fromEntityId, relationType])
+  @@index([toEntityId, relationType])
 }
 
 model CollectionLoop {
@@ -370,26 +399,27 @@ model SectionConfirmation {
 }
 
 model DatapointDefinition {
-  id                         String             @id @default(uuid()) @db.Uuid
-  key                        String
-  label                      String
-  description                String
-  product                    Product
-  category                   String
-  entityType                 EntityType
-  dataType                   DataType
-  requirementType            RequirementType
-  requiredWhen               Json?
-  possibleSources            SourceType[]
-  preferredCollectionMethods CollectionMethod[]
-  validationRules            Json?
-  riskImpact                 ImpactLevel
-  eligibilityImpact          ImpactLevel
-  active                     Boolean            @default(true)
-  version                    Int                @default(1)
-  values                     DatapointValue[]
-  createdAt                  DateTime           @default(now())
-  updatedAt                  DateTime           @updatedAt
+  id                          String             @id @default(uuid()) @db.Uuid
+  key                         String
+  label                       String
+  description                 String
+  product                     Product
+  category                    String
+  entityType                  EntityType
+  dataType                    DataType
+  requirementType             RequirementType
+  requiredWhen                Json?
+  possibleSources             SourceType[]
+  preferredCollectionMethods  CollectionMethod[]
+  validationRules             Json?
+  riskImpact                  ImpactLevel
+  eligibilityImpact           ImpactLevel
+  appliesToAdditionalEntities Boolean            @default(true)
+  active                      Boolean            @default(true)
+  version                     Int                @default(1)
+  values                      DatapointValue[]
+  createdAt                   DateTime           @default(now())
+  updatedAt                   DateTime           @updatedAt
 
   @@unique([key, version])
   @@index([product, active])

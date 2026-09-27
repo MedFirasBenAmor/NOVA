@@ -49,6 +49,117 @@ describe('NextActionRenderer', () => {
     },
   );
 
+  it('renders vehicle add-another actions with French labels and vehicle context', () => {
+    const action: NextAction = {
+      type: 'ASK_ADD_ANOTHER_ENTITY',
+      actionId: 'add-vehicle',
+      entityType: 'VEHICLE',
+      domain: 'AUTO',
+      loopId: 'loop-1',
+      ordinal: 2,
+      label: 'Véhicule 2',
+      question: 'Voulez-vous ajouter un autre véhicule ?',
+      input: { type: 'YES_NO' },
+    };
+    render(<NextActionRenderer action={action} {...handlers} />);
+    expect(screen.getByText('Véhicule 2')).toBeInTheDocument();
+    expect(
+      screen.getByText('Voulez-vous ajouter un autre véhicule ?'),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Oui' }));
+    expect(handlers.onAnswer).toHaveBeenCalledWith(true, 'Oui');
+    expect(screen.getByRole('button', { name: 'Non' })).toBeInTheDocument();
+  });
+
+  it('renders repeatable vehicle context on datapoint actions', () => {
+    const action: NextAction = {
+      type: 'ASK_DATAPOINT',
+      actionId: 'vehicle-2-vin',
+      datapoint: {
+        key: 'vehicle.vin',
+        entityType: 'VEHICLE',
+        entityId: '00000000-0000-4000-8000-000000000022',
+        entityLabel: 'Véhicule 2',
+        label: 'VIN',
+      },
+      input: { type: 'TEXT' },
+    };
+    render(<NextActionRenderer action={action} {...handlers} />);
+    expect(screen.getByText('Véhicule 2')).toBeInTheDocument();
+    expect(screen.getByLabelText('VIN?')).toBeInTheDocument();
+  });
+
+  it('renders driver assignment options and submits the selected principal driver', () => {
+    const action: NextAction = {
+      type: 'ASSIGN_ENTITY_RELATION',
+      actionId: 'assign-v1',
+      relationType: 'DRIVER_VEHICLE_PRIMARY',
+      prompt: 'PRIMARY_DRIVER',
+      sourceEntityType: 'DRIVER',
+      targetEntityType: 'VEHICLE',
+      targetEntityId: 'vehicle-1',
+      vehicleOrdinal: 1,
+      vehicleLabel: 'Véhicule 1',
+      question: 'Qui conduit principalement le véhicule 1 ?',
+      options: [
+        { entityId: 'driver-a', label: 'Ahmed Ben Ali' },
+        { entityId: 'driver-b', label: 'Sarah Ben Ali' },
+      ],
+      input: { type: 'SINGLE_CHOICE' },
+    };
+    render(<NextActionRenderer action={action} {...handlers} />);
+    expect(screen.getByText('Véhicule 1')).toBeInTheDocument();
+    expect(
+      screen.getByText('Qui conduit principalement le véhicule 1 ?'),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Sarah Ben Ali' }));
+    expect(handlers.onAnswer).toHaveBeenCalledWith('driver-b', 'Sarah Ben Ali');
+  });
+
+  it('renders resumed assignment at the first missing vehicle', () => {
+    const action: NextAction = {
+      type: 'ASSIGN_ENTITY_RELATION',
+      actionId: 'assign-v2',
+      relationType: 'DRIVER_VEHICLE_PRIMARY',
+      prompt: 'PRIMARY_DRIVER',
+      sourceEntityType: 'DRIVER',
+      targetEntityType: 'VEHICLE',
+      targetEntityId: 'vehicle-2',
+      vehicleOrdinal: 2,
+      vehicleLabel: 'Véhicule 2',
+      question: 'Qui conduit principalement le véhicule 2 ?',
+      options: [{ entityId: 'driver-b', label: 'Sarah Ben Ali' }],
+      input: { type: 'SINGLE_CHOICE' },
+    };
+    render(<NextActionRenderer action={action} {...handlers} />);
+    expect(screen.queryByText('Véhicule 1')).not.toBeInTheDocument();
+    expect(screen.getByText('Véhicule 2')).toBeInTheDocument();
+    expect(
+      screen.getByText('Qui conduit principalement le véhicule 2 ?'),
+    ).toBeInTheDocument();
+  });
+
+  it('renders occasional driver yes/no assignment prompt', () => {
+    const action: NextAction = {
+      type: 'ASSIGN_ENTITY_RELATION',
+      actionId: 'assign-occasional',
+      relationType: 'DRIVER_VEHICLE_OCCASIONAL',
+      prompt: 'OCCASIONAL_DRIVER_EXISTS',
+      sourceEntityType: 'DRIVER',
+      targetEntityType: 'VEHICLE',
+      targetEntityId: 'vehicle-1',
+      vehicleOrdinal: 1,
+      vehicleLabel: 'Véhicule 1',
+      question:
+        'Y a-t-il un autre conducteur qui utilise occasionnellement ce véhicule ?',
+      input: { type: 'YES_NO' },
+    };
+    render(<NextActionRenderer action={action} {...handlers} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Oui' }));
+    expect(handlers.onAnswer).toHaveBeenCalledWith(true, 'Oui');
+    expect(screen.getByRole('button', { name: 'Non' })).toBeInTheDocument();
+  });
+
   it.each([
     ['NUMBER', 'number'],
     ['DATE', 'date'],
@@ -73,15 +184,48 @@ describe('NextActionRenderer', () => {
         action={{
           type: 'ASK_GROUPED_DATAPOINTS',
           actionId: 'a',
+          title: 'Identité du conducteur',
           datapoints: [
-            { key: 'driver.first_name', entityType: 'DRIVER' },
-            { key: 'driver.last_name', entityType: 'DRIVER' },
+            {
+              key: 'driver.first_name',
+              entityType: 'DRIVER',
+              input: { type: 'TEXT' },
+            },
+            {
+              key: 'driver.last_name',
+              entityType: 'DRIVER',
+              input: { type: 'TEXT' },
+            },
+            {
+              key: 'driver.date_of_birth',
+              entityType: 'DRIVER',
+              input: { type: 'DATE' },
+            },
           ],
         }}
         {...handlers}
       />,
     );
+    expect(screen.getByText('Identité du conducteur')).toBeInTheDocument();
     expect(screen.getByText('Driver First Name')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Driver First Name'), {
+      target: { value: 'Ahmed' },
+    });
+    fireEvent.change(screen.getByLabelText('Driver Last Name'), {
+      target: { value: 'Ben Ali' },
+    });
+    fireEvent.change(screen.getByLabelText('Driver Date Of Birth'), {
+      target: { value: '1988-04-12' },
+    });
+    fireEvent.click(screen.getByText('Continue'));
+    expect(handlers.onAnswer).toHaveBeenCalledWith(
+      {
+        'driver.first_name': 'Ahmed',
+        'driver.last_name': 'Ben Ali',
+        'driver.date_of_birth': '1988-04-12',
+      },
+      'Identité du conducteur',
+    );
     rerender(
       <NextActionRenderer
         action={{
@@ -300,6 +444,53 @@ describe('ChatShell', () => {
   });
   afterEach(() => cleanup());
 
+  it('turns a quick reply into a user bubble and renders the next assistant action below it', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(() => response({ id: 'lead-1' }))
+      .mockImplementationOnce(() =>
+        response({
+          intelligence: {
+            intent: { type: 'NEW_ACQUISITION', confidence: 1 },
+            product: { type: 'AUTO', confidence: 1 },
+            events: [],
+            candidateDatapoints: [],
+          },
+          completeness: {
+            product: 'AUTO',
+            completeness: 8,
+            known: [],
+            missing: [],
+            conditionalRequired: [],
+          },
+          nextAction: {
+            type: 'ASK_CURRENT_INSURANCE',
+            actionId: 'current-auto',
+            productDomain: 'AUTO',
+            question: 'Avez-vous déjà une assurance auto ?',
+            input: { type: 'YES_NO' },
+          },
+          metrics: { acceptedCandidateDatapoints: 0 },
+        }),
+      );
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<ChatShell />);
+    await screen.findByText('Comment voulez-vous commencer ?');
+    fireEvent.click(screen.getByText('J’ai une nouvelle voiture'));
+
+    expect(
+      await screen.findByText('J’ai une nouvelle voiture'),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByText('Avez-vous déjà une assurance auto ?'),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText('Comment voulez-vous commencer ?'),
+    ).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Message')).toBeInTheDocument();
+  });
+
   it('creates an anonymous lead and submits customer text to intelligence', async () => {
     const fetchMock = vi
       .fn()
@@ -347,6 +538,274 @@ describe('ChatShell', () => {
     );
   });
 
+  it('passes the current datapoint context with free-text chat answers', async () => {
+    const claimAction = {
+      type: 'ASK_DATAPOINT' as const,
+      actionId: 'action-1',
+      datapoint: {
+        key: 'claim.description',
+        entityType: 'CLAIM' as const,
+        entityId: '00000000-0000-4000-8000-000000000123',
+        label: 'Claim description',
+      },
+      input: { type: 'TEXT' as const },
+    };
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(() => response({ id: 'lead-1' }))
+      .mockImplementationOnce(() =>
+        response({
+          intelligence: {
+            intent: { type: 'GENERAL_INQUIRY', confidence: 1 },
+            product: { type: 'AUTO', confidence: 1 },
+            events: [],
+            candidateDatapoints: [],
+          },
+          completeness: {
+            product: 'AUTO',
+            completeness: 16,
+            known: [],
+            missing: [],
+            conditionalRequired: [],
+          },
+          nextAction: claimAction,
+          metrics: { acceptedCandidateDatapoints: 0 },
+        }),
+      )
+      .mockImplementationOnce(() =>
+        response({
+          intelligence: {
+            intent: { type: 'CLAIM_MENTIONED', confidence: 1 },
+            product: { type: 'AUTO', confidence: 1 },
+            events: [],
+            candidateDatapoints: [],
+          },
+          completeness: {
+            product: 'AUTO',
+            completeness: 20,
+            known: [],
+            missing: [],
+            conditionalRequired: [],
+          },
+          nextAction: { type: 'COMPLETE', actionId: 'done' },
+          metrics: { acceptedCandidateDatapoints: 0 },
+        }),
+      );
+    vi.stubGlobal('fetch', fetchMock);
+    render(<ChatShell />);
+    const composer = await screen.findByLabelText('Message');
+    fireEvent.change(composer, { target: { value: 'continue' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+    await screen.findByText('Claim description?');
+    fireEvent.change(composer, { target: { value: 'Small windshield claim' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+    await screen.findByText('Small windshield claim');
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      expect.stringContaining('/interactions'),
+      expect.objectContaining({
+        body: JSON.stringify({
+          message: 'Small windshield claim',
+          entityContext: {
+            claimId: '00000000-0000-4000-8000-000000000123',
+            currentDatapoint: {
+              key: 'claim.description',
+              label: 'Claim description',
+              entityType: 'CLAIM',
+              entityId: '00000000-0000-4000-8000-000000000123',
+            },
+          },
+        }),
+      }),
+    );
+  });
+
+  it('summarizes extracted vehicle facts and invites corrections', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(() => response({ id: 'lead-1' }))
+      .mockImplementationOnce(() =>
+        response({
+          intelligence: {
+            intent: { type: 'NEW_ACQUISITION', confidence: 1 },
+            product: { type: 'AUTO', confidence: 1 },
+            events: [],
+            candidateDatapoints: [
+              {
+                key: 'vehicle.year',
+                value: 2024,
+                entityType: 'VEHICLE',
+                method: 'EXTRACTED',
+                confidence: 0.99,
+              },
+              {
+                key: 'vehicle.make',
+                value: 'TOYOTA',
+                entityType: 'VEHICLE',
+                method: 'EXTRACTED',
+                confidence: 0.99,
+              },
+              {
+                key: 'vehicle.model',
+                value: 'RAV4',
+                entityType: 'VEHICLE',
+                method: 'EXTRACTED',
+                confidence: 0.99,
+              },
+            ],
+          },
+          completeness: {
+            product: 'AUTO',
+            completeness: 16,
+            known: [],
+            missing: [],
+            conditionalRequired: [],
+          },
+          nextAction: { type: 'COMPLETE', actionId: 'done' },
+          metrics: { acceptedCandidateDatapoints: 3 },
+        }),
+      );
+    vi.stubGlobal('fetch', fetchMock);
+    render(<ChatShell />);
+    const composer = await screen.findByLabelText('Message');
+    fireEvent.change(composer, {
+      target: { value: 'I drive a 2024 Toyota RAV4' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+    expect(
+      await screen.findByText(/So I have a 2024 Toyota Rav4/),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/If anything is wrong/)).toBeInTheDocument();
+  });
+
+  it('answers a greeting even when no dossier facts are extracted', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(() => response({ id: 'lead-1' }))
+      .mockImplementationOnce(() =>
+        response({
+          intelligence: {
+            intent: { type: 'GENERAL_INQUIRY', confidence: 1 },
+            product: { type: 'COMMON', confidence: 0.7 },
+            events: [],
+            candidateDatapoints: [],
+          },
+          completeness: {
+            product: 'COMMON',
+            completeness: 0,
+            known: [],
+            missing: [],
+            conditionalRequired: [],
+          },
+          nextAction: {
+            type: 'SELECT_PRODUCT',
+            actionId: 'select-product',
+            options: [
+              { value: 'AUTO', label: 'Auto' },
+              { value: 'HOME', label: 'Home' },
+              { value: 'AUTO_HOME', label: 'Auto + Home' },
+            ],
+          },
+          metrics: { acceptedCandidateDatapoints: 0 },
+        }),
+      );
+    vi.stubGlobal('fetch', fetchMock);
+    render(<ChatShell />);
+    const composer = await screen.findByLabelText('Message');
+    fireEvent.change(composer, { target: { value: 'hello' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+    expect(await screen.findByText('hello')).toBeInTheDocument();
+    expect(await screen.findByText(/Hi — I’m here/)).toBeInTheDocument();
+    expect(
+      screen.getByText('Choose what you want to insure'),
+    ).toBeInTheDocument();
+  });
+
+  it('renders structured API validation errors as readable text', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(() => response({ id: 'lead-1' }))
+      .mockImplementationOnce(() =>
+        Promise.resolve({
+          ok: false,
+          status: 400,
+          json: async () => ({
+            message: [
+              {
+                property: 'entityContext',
+                constraints: {
+                  whitelistValidation:
+                    'entityContext contains an unsupported field',
+                },
+              },
+            ],
+          }),
+        } as Response),
+      );
+    vi.stubGlobal('fetch', fetchMock);
+    render(<ChatShell />);
+    const composer = await screen.findByLabelText('Message');
+    fireEvent.change(composer, { target: { value: 'hi' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+    expect(
+      await screen.findByText('entityContext contains an unsupported field'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('[object Object]')).not.toBeInTheDocument();
+  });
+
+  it('recovers from a stale anonymous session during message send', async () => {
+    localStorage.setItem('nova.leadId', 'lead-existing');
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(() => response({ messages: [] }))
+      .mockImplementationOnce(() =>
+        Promise.resolve({
+          ok: false,
+          status: 403,
+          json: async () => ({ message: 'Invalid anonymous session' }),
+        } as Response),
+      )
+      .mockImplementationOnce(() => response({ id: 'lead-new' }))
+      .mockImplementationOnce(() =>
+        response({
+          intelligence: {
+            intent: { type: 'GENERAL_INQUIRY', confidence: 1 },
+            product: { type: 'COMMON', confidence: 0.5 },
+            events: [],
+            candidateDatapoints: [],
+          },
+          completeness: {
+            product: 'COMMON',
+            completeness: 0,
+            known: [],
+            missing: [],
+            conditionalRequired: [],
+          },
+          nextAction: {
+            type: 'SELECT_PRODUCT',
+            actionId: 'select-product',
+            options: [{ value: 'AUTO', label: 'Auto' }],
+          },
+          metrics: { acceptedCandidateDatapoints: 0 },
+        }),
+      );
+    vi.stubGlobal('fetch', fetchMock);
+    render(<ChatShell />);
+    const composer = await screen.findByLabelText('Message');
+    fireEvent.change(composer, { target: { value: 'hi' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+    expect(await screen.findByText(/Hi — I’m here/)).toBeInTheDocument();
+    expect(
+      screen.getByText('Choose what you want to insure'),
+    ).toBeInTheDocument();
+    expect(localStorage.getItem('nova.leadId')).toBe('lead-new');
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      4,
+      expect.stringContaining('/leads/lead-new/interactions'),
+      expect.objectContaining({ body: JSON.stringify({ message: 'hi' }) }),
+    );
+  });
+
   it('reuses an existing lead and restores conversation messages', async () => {
     localStorage.setItem('nova.leadId', 'lead-existing');
     const fetchMock = vi.fn(() =>
@@ -368,6 +827,46 @@ describe('ChatShell', () => {
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining('/leads/lead-existing/conversation'),
       expect.anything(),
+    );
+  });
+
+  it('creates a new folder and resets the chat from an existing lead', async () => {
+    localStorage.setItem('nova.leadId', 'lead-existing');
+    localStorage.setItem(
+      'nova.processingDocument',
+      '{"type":"WAIT_FOR_PROCESSING"}',
+    );
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(() =>
+        response({
+          messages: [
+            {
+              id: 'm1',
+              role: 'CUSTOMER',
+              content: 'Existing message',
+              createdAt: new Date().toISOString(),
+            },
+          ],
+        }),
+      )
+      .mockImplementationOnce(() => response({ id: 'lead-new' }));
+    vi.stubGlobal('fetch', fetchMock);
+    render(<ChatShell />);
+    expect(await screen.findByText('Existing message')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /New folder/i }));
+    expect(
+      await screen.findByText(
+        'Hi! Tell me what you need help with, in your own words.',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('Existing message')).not.toBeInTheDocument();
+    expect(localStorage.getItem('nova.leadId')).toBe('lead-new');
+    expect(localStorage.getItem('nova.processingDocument')).toBeNull();
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining('/leads'),
+      expect.objectContaining({ method: 'POST', credentials: 'include' }),
     );
   });
 

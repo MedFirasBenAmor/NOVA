@@ -31,7 +31,8 @@ const acceptedActions = new Set<CollectionActionType>([
 const mimeExtensions: Record<string, string> = {
   'image/jpeg': 'jpg',
   'image/png': 'png',
-  'image/webp': 'webp',
+  'image/heic': 'heic',
+  'image/heif': 'heif',
   'application/pdf': 'pdf',
 };
 
@@ -243,12 +244,26 @@ export class DocumentsService {
               .equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
           : file.mimetype === 'application/pdf'
             ? b.subarray(0, 4).toString() === '%PDF'
-            : b.subarray(0, 4).toString() === 'RIFF' &&
-              b.subarray(8, 12).toString() === 'WEBP';
+            : this.isHeifContainer(b);
     if (!valid)
       throw new BadRequestException(
         'Document content does not match its MIME type',
       );
+  }
+
+  private isHeifContainer(buffer: Buffer) {
+    if (buffer.length < 12) return false;
+    if (buffer.subarray(4, 8).toString('ascii') !== 'ftyp') return false;
+    const brand = buffer.subarray(8, 12).toString('ascii');
+    return new Set([
+      'heic',
+      'heix',
+      'hevc',
+      'hevx',
+      'heif',
+      'mif1',
+      'msf1',
+    ]).has(brand);
   }
 
   private async documentEntityId(

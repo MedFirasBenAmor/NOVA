@@ -1,4 +1,5 @@
 import {
+  CollectionMethod,
   DatapointStatus,
   EntityType,
   Product,
@@ -15,6 +16,8 @@ function definition(
   entityType: EntityType,
   requirementType: RequirementType,
   requiredWhen?: Prisma.JsonObject,
+  appliesToAdditionalEntities = true,
+  preferredCollectionMethods: CollectionMethod[] = [],
 ): {
   id: string;
   key: string;
@@ -22,6 +25,8 @@ function definition(
   entityType: EntityType;
   requirementType: RequirementType;
   requiredWhen: Prisma.JsonValue | null;
+  appliesToAdditionalEntities: boolean;
+  preferredCollectionMethods: CollectionMethod[];
 } {
   return {
     id: id(definitionCounter++),
@@ -35,6 +40,8 @@ function definition(
     entityType,
     requirementType,
     requiredWhen: requiredWhen ?? null,
+    appliesToAdditionalEntities,
+    preferredCollectionMethods,
   };
 }
 
@@ -296,6 +303,8 @@ describe('resolveCompleteness', () => {
       'driver.license_suspended_last_3_years',
       EntityType.DRIVER,
       RequirementType.REQUIRED,
+      undefined,
+      false,
     );
     const primary = id(70);
     const additional = id(71);
@@ -477,4 +486,245 @@ it('uses canonical primary entity ids for scoped primary requirements', () => {
   expect(result.missing).toEqual([
     expect.objectContaining({ key: year.key, entityId: canonicalVehicle }),
   ]);
+});
+
+describe('resolveCompleteness appliesToAdditionalEntities', () => {
+  it('requires an applicable datapoint for the primary driver', () => {
+    const firstName = definition(
+      'driver.first_name',
+      EntityType.DRIVER,
+      RequirementType.REQUIRED,
+    );
+    const primary = id(80);
+    const result = resolveCompleteness(Product.AUTO, [firstName], [], {
+      DRIVER: [primary],
+    });
+    expect(result.missing).toEqual([
+      expect.objectContaining({ key: 'driver.first_name', entityId: primary }),
+    ]);
+  });
+
+  it('requires an appliesToAdditionalEntities datapoint for additional drivers', () => {
+    const firstName = definition(
+      'driver.first_name',
+      EntityType.DRIVER,
+      RequirementType.REQUIRED,
+    );
+    const primary = id(81);
+    const additional = id(82);
+    const result = resolveCompleteness(
+      Product.AUTO,
+      [firstName],
+      [value(firstName.id, firstName.key, EntityType.DRIVER, 'Alice', primary)],
+      { DRIVER: [primary, additional] },
+    );
+    expect(result.missing).toEqual([
+      expect.objectContaining({
+        key: 'driver.first_name',
+        entityId: additional,
+      }),
+    ]);
+  });
+
+  it('does not require a non-applicable datapoint for additional drivers', () => {
+    const suspended = definition(
+      'driver.license_suspended_last_3_years',
+      EntityType.DRIVER,
+      RequirementType.REQUIRED,
+      undefined,
+      false,
+    );
+    const primary = id(83);
+    const additional = id(84);
+    const result = resolveCompleteness(
+      Product.AUTO,
+      [suspended],
+      [value(suspended.id, suspended.key, EntityType.DRIVER, false, primary)],
+      { DRIVER: [primary, additional] },
+    );
+    expect(result.missing).toHaveLength(0);
+    expect(result.completeness).toBe(100);
+  });
+
+  it('still requires a non-applicable datapoint for the primary driver', () => {
+    const suspended = definition(
+      'driver.license_suspended_last_3_years',
+      EntityType.DRIVER,
+      RequirementType.REQUIRED,
+      undefined,
+      false,
+    );
+    const primary = id(85);
+    const additional = id(86);
+    const result = resolveCompleteness(Product.AUTO, [suspended], [], {
+      DRIVER: [primary, additional],
+    });
+    expect(result.missing).toEqual([
+      expect.objectContaining({
+        key: 'driver.license_suspended_last_3_years',
+        entityId: primary,
+      }),
+    ]);
+    expect(result.missing.some((item) => item.entityId === additional)).toBe(
+      false,
+    );
+  });
+
+  it('applies applicable datapoints across multiple additional drivers', () => {
+    const firstName = definition(
+      'driver.first_name',
+      EntityType.DRIVER,
+      RequirementType.REQUIRED,
+    );
+    const lastName = definition(
+      'driver.last_name',
+      EntityType.DRIVER,
+      RequirementType.REQUIRED,
+    );
+    const primary = id(87);
+    const second = id(88);
+    const third = id(89);
+    const result = resolveCompleteness(
+      Product.AUTO,
+      [firstName, lastName],
+      [
+        value(firstName.id, firstName.key, EntityType.DRIVER, 'Alice', primary),
+        value(lastName.id, lastName.key, EntityType.DRIVER, 'Primary', primary),
+        value(firstName.id, firstName.key, EntityType.DRIVER, 'Bob', second),
+      ],
+      { DRIVER: [primary, second, third] },
+    );
+    expect(result.missing).toHaveLength(3);
+    expect(result.missing).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ key: 'driver.last_name', entityId: second }),
+        expect.objectContaining({ key: 'driver.first_name', entityId: third }),
+        expect.objectContaining({ key: 'driver.last_name', entityId: third }),
+      ]),
+    );
+    expect(result.completeness).toBeLessThan(100);
+  });
+});
+
+describe('resolveCompleteness OPTIONAL askability', () => {
+  it('surfaces an optional datapoint as askable when MANUAL_QUESTION is preferred', () => {
+    const askable = definition(
+      'auto.cancelled_or_refused_last_3_years',
+      EntityType.CUSTOMER,
+      RequirementType.OPTIONAL,
+      undefined,
+      true,
+      [CollectionMethod.MANUAL_QUESTION],
+    );
+    const result = resolveCompleteness(Product.AUTO, [askable], []);
+    expect(result.missing).toEqual([
+      expect.objectContaining({
+        key: 'auto.cancelled_or_refused_last_3_years',
+        reason: 'OPTIONAL',
+      }),
+    ]);
+  });
+
+  it('keeps a non-askable optional datapoint out of the missing list', () => {
+    const extractionOnly = definition(
+      'auto.interruption_for_non_payment',
+      EntityType.CUSTOMER,
+      RequirementType.OPTIONAL,
+      undefined,
+      true,
+      [CollectionMethod.EXTRACTED],
+    );
+    const result = resolveCompleteness(Product.AUTO, [extractionOnly], []);
+    expect(result.missing).toHaveLength(0);
+  });
+
+  it('never lets an askable optional datapoint lower the completeness percentage', () => {
+    const required = definition(
+      'customer.first_name',
+      EntityType.CUSTOMER,
+      RequirementType.REQUIRED,
+    );
+    const askable = definition(
+      'vehicle.anti_theft_marking',
+      EntityType.VEHICLE,
+      RequirementType.OPTIONAL,
+      undefined,
+      true,
+      [CollectionMethod.MANUAL_QUESTION],
+    );
+    const satisfied = value(
+      required.id,
+      required.key,
+      EntityType.CUSTOMER,
+      'Ada',
+    );
+    const result = resolveCompleteness(
+      Product.AUTO,
+      [required, askable],
+      [satisfied],
+    );
+    expect(result.completeness).toBe(100);
+    expect(result.missing).toEqual([
+      expect.objectContaining({
+        key: 'vehicle.anti_theft_marking',
+        reason: 'OPTIONAL',
+      }),
+    ]);
+  });
+});
+
+describe('resolveCompleteness vehicle isolation', () => {
+  it('keeps vehicle 2 incomplete when only vehicle 1 has values', () => {
+    const vin = definition(
+      'vehicle.vin',
+      EntityType.VEHICLE,
+      RequirementType.REQUIRED,
+    );
+    const year = definition(
+      'vehicle.year',
+      EntityType.VEHICLE,
+      RequirementType.REQUIRED,
+    );
+    const first = id(90);
+    const second = id(91);
+    const values = [
+      value(vin.id, vin.key, EntityType.VEHICLE, '1HGCM82633A123456', first),
+      value(year.id, year.key, EntityType.VEHICLE, 2022, first),
+    ];
+    const result = resolveCompleteness(Product.AUTO, [vin, year], values, {
+      VEHICLE: [first, second],
+    });
+    expect(result.completeness).toBe(50);
+    expect(result.missing.map((item) => item.key)).toEqual([
+      'vehicle.vin',
+      'vehicle.year',
+    ]);
+    expect(result.missing.every((item) => item.entityId === second)).toBe(true);
+  });
+
+  it('reaches full completeness once vehicle 2 is filled in', () => {
+    const vin = definition(
+      'vehicle.vin',
+      EntityType.VEHICLE,
+      RequirementType.REQUIRED,
+    );
+    const year = definition(
+      'vehicle.year',
+      EntityType.VEHICLE,
+      RequirementType.REQUIRED,
+    );
+    const first = id(92);
+    const second = id(93);
+    const values = [
+      value(vin.id, vin.key, EntityType.VEHICLE, '1HGCM82633A123456', first),
+      value(year.id, year.key, EntityType.VEHICLE, 2022, first),
+      value(vin.id, vin.key, EntityType.VEHICLE, '2HGCM82633A654321', second),
+      value(year.id, year.key, EntityType.VEHICLE, 2023, second),
+    ];
+    const result = resolveCompleteness(Product.AUTO, [vin, year], values, {
+      VEHICLE: [first, second],
+    });
+    expect(result.completeness).toBe(100);
+    expect(result.missing).toHaveLength(0);
+  });
 });

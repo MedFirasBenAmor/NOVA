@@ -19,6 +19,10 @@ export class DriverLicenseExtractor {
       const dob = block.text.match(
         /(?:DOB|DATE DE NAISSANCE)\s*:\s*(\d{4}-\d{2}-\d{2})/i,
       )?.[1];
+      // Licence class is intentionally not extracted: OCR cannot read it
+      // reliably, and mapping a spotted "class 5" onto a licence-type enum
+      // invents a value the document does not support. The authoritative
+      // licence schema is Phase 5.
       if (surname)
         candidates.push({
           key: 'driver.last_name',

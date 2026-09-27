@@ -38,6 +38,7 @@ const commonOrder = [
   'customer.gender',
   'customer.marital_status',
   'customer.occupation',
+  'customer.has_criminal_record',
   'customer.phone',
   'customer.email',
   'customer.address.street',
@@ -96,7 +97,6 @@ const autoOrder = [
   'claim.year',
   'claim.description',
   'auto.additional_driver_exists',
-  'vehicle.multi_vehicle_policy_requested',
   'auto.liability_limit_requested',
 ];
 
@@ -290,10 +290,8 @@ export class QuestionSequenceService {
     missing: MissingItem[],
     capabilityEntityType: EntityType,
   ) {
-    const next = missing[0];
-    if (!next) return false;
     if (capabilityEntityType !== EntityType.DRIVER) return true;
-    return autoDriverDocumentKeys.has(next.key);
+    return missing.some((item) => autoDriverDocumentKeys.has(item.key));
   }
 
   private rank(

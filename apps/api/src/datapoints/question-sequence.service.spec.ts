@@ -30,6 +30,7 @@ const definition = (
   validationRules: null,
   riskImpact: 'NONE',
   eligibilityImpact: 'NONE',
+  appliesToAdditionalEntities: true,
   active: true,
   version: 1,
   createdAt: new Date(),
@@ -79,6 +80,20 @@ describe('QuestionSequenceService', () => {
     expect(
       order(['vehicle.vin', 'request.type', 'property.dwelling_type']),
     ).toEqual(['request.type', 'vehicle.vin', 'property.dwelling_type']);
+  });
+
+  it('asks criminal record after personal customer profile details', () => {
+    expect(
+      order([
+        'customer.phone',
+        'customer.has_criminal_record',
+        'customer.occupation',
+      ]),
+    ).toEqual([
+      'customer.occupation',
+      'customer.has_criminal_record',
+      'customer.phone',
+    ]);
   });
 
   it('forbids vehicle acquisition before vehicle identification', () => {
@@ -147,7 +162,7 @@ describe('QuestionSequenceService', () => {
     ]);
   });
 
-  it('only considers driver-license documents inside the driver section', () => {
+  it('considers driver-license documents as an upfront accelerator when driver fields are missing', () => {
     expect(
       service.shouldConsiderDocumentForNextMissing(
         [missing('vehicle.vin', EntityType.VEHICLE)],
@@ -157,6 +172,16 @@ describe('QuestionSequenceService', () => {
     expect(
       service.shouldConsiderDocumentForNextMissing(
         [missing('driver.first_name', EntityType.DRIVER)],
+        EntityType.DRIVER,
+      ),
+    ).toBe(true);
+    expect(
+      service.shouldConsiderDocumentForNextMissing(
+        [
+          missing('request.type', EntityType.CUSTOMER),
+          missing('vehicle.vin', EntityType.VEHICLE),
+          missing('driver.date_of_birth', EntityType.DRIVER),
+        ],
         EntityType.DRIVER,
       ),
     ).toBe(true);

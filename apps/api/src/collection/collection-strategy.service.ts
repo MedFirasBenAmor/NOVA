@@ -1,11 +1,21 @@
-import { Injectable, NotFoundException, Optional } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+  Optional,
+} from '@nestjs/common';
 import {
   CollectionActionType,
+  CollectionMethod,
   CollectionAttemptStatus,
   EntityDomain,
+  EntityRole,
+  EntityRelationType,
   EntityType,
   IntakePhase,
+  Product,
   type CollectionLoop,
+  type DossierEntity,
 } from '@prisma/client';
 import type { CompletenessResponse, NextAction } from '@nova/shared-types';
 import { randomUUID } from 'node:crypto';
@@ -24,6 +34,28 @@ import { EntityLifecycleService } from '../datapoints/entity-lifecycle.service';
 import { SectionReviewService } from '../datapoints/section-review.service';
 import { buildInputContract } from '../datapoints/input-contract';
 import { QuestionSequenceService } from '../datapoints/question-sequence.service';
+import { EntityRelationService } from '../datapoints/entity-relation.service';
+
+type RelationPrompt =
+  'PRIMARY_DRIVER' | 'OCCASIONAL_DRIVER_EXISTS' | 'OCCASIONAL_DRIVER_SELECT';
+
+type DriverOption = { entityId: string; label: string };
+
+const driverIdentityKeys = new Set([
+  'driver.first_name',
+  'driver.last_name',
+  'driver.date_of_birth',
+]);
+
+type AssignmentMetadata = {
+  prompt?: RelationPrompt;
+  vehicleId?: string;
+  vehicleOrdinal?: number;
+  relationType?: EntityRelationType;
+  promptedByAttemptId?: string;
+  answer?: unknown;
+  driverId?: string;
+};
 
 @Injectable()
 export class CollectionStrategyService {
@@ -55,6 +87,8 @@ export class CollectionStrategyService {
     private readonly reviews?: SectionReviewService,
     @Optional()
     private readonly sequence?: QuestionSequenceService,
+    @Optional()
+    private readonly relations?: EntityRelationService,
   ) {}
 
   async select(
@@ -86,9 +120,16 @@ export class CollectionStrategyService {
           documents[0].status === 'PROCESSING' ? 'PROCESSING' : 'UPLOADED',
       };
     }
-    const loopAction = await this.loopAction(leadId, product, orderedMissing);
+    const loopAction = await this.loopAction(
+      leadId,
+      product,
+      orderedMissing,
+      definitions,
+    );
     if (loopAction) return loopAction;
     if (!completeness.missing.length) {
+      const assignmentAction = await this.assignmentAction(leadId, product);
+      if (assignmentAction) return assignmentAction;
       const reviewAction = await this.reviews?.nextReviewAction(
         leadId,
         product,
@@ -151,7 +192,13 @@ export class CollectionStrategyService {
               cap.providesDatapoints.includes(item.key),
           )
         : [];
-      if (cap && covered.length) {
+      if (cap && (covered.length || accepted.documentType)) {
+        const metadata = (accepted.metadata ?? {}) as {
+          coveredMissingDatapoints?: string[];
+        };
+        const coveredKeys = covered.length
+          ? covered.map((item) => item.key)
+          : (metadata.coveredMissingDatapoints ?? cap.providesDatapoints);
         return {
           type:
             cap.type === 'FULL_DOCUMENT'
@@ -161,8 +208,8 @@ export class CollectionStrategyService {
           documentType: cap.documentType,
           entityType: cap.entityType,
           ...(accepted.entityId ? { entityId: accepted.entityId } : {}),
-          coveredMissingDatapoints: covered.map((item) => item.key),
-          questionsPotentiallyAvoided: covered.length,
+          coveredMissingDatapoints: coveredKeys,
+          questionsPotentiallyAvoided: coveredKeys.length,
           required: false,
           accepted: true,
         };
@@ -226,6 +273,14 @@ export class CollectionStrategyService {
     const definition = definitions.find((d) => d.key === item.key);
     if (!definition)
       throw new NotFoundException(`Definition not found for ${item.key}`);
+    const grouped = await this.driverIdentityGroupAction(
+      leadId,
+      product,
+      item,
+      orderedMissing,
+      definitions,
+    );
+    if (grouped) return grouped;
     const input = buildInputContract(definition);
     const attempt = await this.prisma.collectionAttempt.create({
       data: {
@@ -305,6 +360,12 @@ export class CollectionStrategyService {
     if (attempt.actionType === CollectionActionType.ASK_ADD_ANOTHER_ENTITY) {
       return this.answerAddAnother(leadId, attempt.id, value, message);
     }
+    if (attempt.actionType === CollectionActionType.ASSIGN_ENTITY_RELATION) {
+      return this.answerEntityRelation(leadId, attempt.id, value, message);
+    }
+    if (attempt.actionType === CollectionActionType.ASK_GROUPED_DATAPOINTS) {
+      return this.answerGroupedDatapoints(leadId, attempt.id, value, message);
+    }
     if (attempt.actionType === CollectionActionType.REVIEW_SECTION) {
       await this.reviews?.confirm(leadId, attempt.id, value, message);
       return {
@@ -359,7 +420,11 @@ export class CollectionStrategyService {
     leadId: string,
     product: SelectedProduct,
     orderedMissing: CompletenessResponse['missing'],
+    definitions: Awaited<ReturnType<RequirementProfileService['forProduct']>>,
   ): Promise<NextAction | undefined> {
+    if (product === Product.AUTO || product === Product.AUTO_HOME) {
+      await this.entities.ensureVehicleLoop(leadId);
+    }
     const loops = await this.entities.openLoopsForLead(leadId);
     for (const loop of loops) {
       const currentEntity = await this.currentLoopEntity(leadId, loop);
@@ -368,20 +433,167 @@ export class CollectionStrategyService {
         (item) => item.entityId === currentEntity.id,
       );
       if (missing) {
-        return this.askDatapoint(leadId, product, missing);
+        const grouped = await this.driverIdentityGroupAction(
+          leadId,
+          product,
+          missing,
+          orderedMissing,
+          definitions,
+        );
+        if (grouped) return grouped;
+        return this.askDatapoint(
+          leadId,
+          product,
+          missing,
+          loop.entityType === EntityType.VEHICLE && loop.currentOrdinal > 1
+            ? this.loopLabel(loop)
+            : undefined,
+        );
       }
       return this.askAddAnother(leadId, product, loop);
     }
     return undefined;
   }
 
+  private async driverIdentityGroupAction(
+    leadId: string,
+    product: SelectedProduct,
+    item: CompletenessResponse['missing'][number],
+    orderedMissing: CompletenessResponse['missing'],
+    definitions: Awaited<ReturnType<RequirementProfileService['forProduct']>>,
+  ): Promise<NextAction | undefined> {
+    if (
+      item.entityType !== EntityType.DRIVER ||
+      !item.entityId ||
+      !driverIdentityKeys.has(item.key)
+    ) {
+      return undefined;
+    }
+    const missingIdentity = orderedMissing.filter(
+      (missing) =>
+        missing.entityType === EntityType.DRIVER &&
+        missing.entityId === item.entityId &&
+        driverIdentityKeys.has(missing.key),
+    );
+    if (missingIdentity.length < 2) return undefined;
+    const definitionByKey = new Map(
+      definitions.map((definition) => [definition.key, definition]),
+    );
+    const existing = await this.prisma.collectionAttempt.findFirst({
+      where: {
+        leadId,
+        actionType: CollectionActionType.ASK_GROUPED_DATAPOINTS,
+        entityType: EntityType.DRIVER,
+        entityId: item.entityId,
+        status: CollectionAttemptStatus.PROPOSED,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    const keys = missingIdentity.map((missing) => missing.key);
+    const attempt =
+      existing ??
+      (await this.prisma.collectionAttempt.create({
+        data: {
+          leadId,
+          actionType: CollectionActionType.ASK_GROUPED_DATAPOINTS,
+          entityType: EntityType.DRIVER,
+          entityId: item.entityId,
+          product,
+          metadata: {
+            group: 'DRIVER_IDENTITY',
+            keys,
+          },
+        },
+      }));
+    return {
+      type: 'ASK_GROUPED_DATAPOINTS',
+      actionId: attempt.id,
+      title: 'Identité du conducteur',
+      datapoints: keys.map((key) => {
+        const definition = definitionByKey.get(key);
+        if (!definition)
+          throw new NotFoundException(`Definition not found for ${key}`);
+        return {
+          key,
+          entityType: EntityType.DRIVER,
+          entityId: item.entityId,
+          label: definition.label,
+          input: buildInputContract(definition),
+        };
+      }),
+    };
+  }
+
+  private async answerGroupedDatapoints(
+    leadId: string,
+    actionId: string,
+    value: unknown,
+    message?: string,
+  ) {
+    const attempt = await this.prisma.collectionAttempt.findFirst({
+      where: {
+        id: actionId,
+        leadId,
+        actionType: CollectionActionType.ASK_GROUPED_DATAPOINTS,
+      },
+    });
+    if (!attempt) throw new NotFoundException('Grouped datapoint action not found');
+    if (attempt.status !== CollectionAttemptStatus.PROPOSED) {
+      return { nextAction: await this.selectForLead(leadId) };
+    }
+    const metadata = (attempt.metadata ?? {}) as { keys?: string[] };
+    if (!attempt.entityType || !Array.isArray(metadata.keys)) {
+      throw new NotFoundException('Grouped datapoint action is incomplete');
+    }
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      throw new BadRequestException('Grouped datapoints require an object value');
+    }
+    const values = value as Record<string, unknown>;
+    if (message) await this.conversations.addCustomerMessage(leadId, message);
+    for (const key of metadata.keys) {
+      if (!(key in values) || values[key] === '' || values[key] === null) {
+        throw new BadRequestException(`${key} is required`);
+      }
+      await this.datapoints.upsert(leadId, {
+        key,
+        value: values[key],
+        entityType: attempt.entityType,
+        entityId: attempt.entityId ?? undefined,
+        sourceType: 'CUSTOMER_FORM',
+        collectionMethod: CollectionMethod.MANUAL_QUESTION,
+        sourceReferenceId: actionId,
+      });
+    }
+    await this.prisma.collectionAttempt.update({
+      where: { id: actionId },
+      data: {
+        status: CollectionAttemptStatus.COMPLETED,
+        resolvedAt: new Date(),
+      },
+    });
+    const completeness = await this.datapoints.completeness(
+      leadId,
+      attempt.product as SelectedProduct,
+    );
+    return {
+      completeness,
+      nextAction: await this.select(
+        leadId,
+        attempt.product as SelectedProduct,
+        completeness,
+      ),
+    };
+  }
+
   private async currentLoopEntity(leadId: string, loop: CollectionLoop) {
+    const isPrimaryVehicle =
+      loop.entityType === EntityType.VEHICLE && loop.currentOrdinal === 1;
     return this.prisma.dossierEntity.findFirst({
       where: {
         customerFolder: { leadId },
         entityType: loop.entityType,
-        role: loop.role,
-        domain: loop.domain,
+        role: isPrimaryVehicle ? EntityRole.PRIMARY : loop.role,
+        domain: isPrimaryVehicle ? EntityDomain.NONE : loop.domain,
         ordinal: loop.currentOrdinal,
       },
     });
@@ -391,6 +603,7 @@ export class CollectionStrategyService {
     leadId: string,
     product: SelectedProduct,
     item: CompletenessResponse['missing'][number],
+    entityLabel?: string,
   ): Promise<NextAction> {
     const definitions = await this.profiles.forProduct(product);
     const definition = definitions.find((d) => d.key === item.key);
@@ -415,6 +628,7 @@ export class CollectionStrategyService {
         key: item.key,
         entityType: item.entityType as `${EntityType}`,
         ...(item.entityId ? { entityId: item.entityId } : {}),
+        ...(entityLabel ? { entityLabel } : {}),
         ...(definition?.label ? { label: definition.label } : {}),
         ...(definition?.description
           ? { description: definition.description }
@@ -527,9 +741,406 @@ export class CollectionStrategyService {
     };
   }
 
+  private async assignmentAction(
+    leadId: string,
+    product: SelectedProduct,
+  ): Promise<NextAction | undefined> {
+    if (!this.relations) return undefined;
+    if (product !== Product.AUTO && product !== Product.AUTO_HOME)
+      return undefined;
+    const folder = await this.prisma.customerFolder.findUnique({
+      where: { leadId },
+      select: { id: true },
+    });
+    if (!folder) return undefined;
+    const [entities, relationRows, attempts, values] = await Promise.all([
+      this.prisma.dossierEntity.findMany({
+        where: { customerFolderId: folder.id },
+        orderBy: [{ entityType: 'asc' }, { role: 'asc' }, { ordinal: 'asc' }],
+      }),
+      this.prisma.entityRelation.findMany({
+        where: {
+          customerFolderId: folder.id,
+          relationType: {
+            in: [
+              EntityRelationType.DRIVER_VEHICLE_PRIMARY,
+              EntityRelationType.DRIVER_VEHICLE_OCCASIONAL,
+            ],
+          },
+        },
+        orderBy: { createdAt: 'asc' },
+      }),
+      this.prisma.collectionAttempt.findMany({
+        where: {
+          leadId,
+          actionType: CollectionActionType.ASSIGN_ENTITY_RELATION,
+          status: {
+            in: [
+              CollectionAttemptStatus.PROPOSED,
+              CollectionAttemptStatus.COMPLETED,
+            ],
+          },
+        },
+        orderBy: { createdAt: 'asc' },
+      }),
+      this.prisma.datapointValue.findMany({
+        where: {
+          customerFolderId: folder.id,
+          entityType: EntityType.DRIVER,
+          definition: {
+            key: { in: ['driver.first_name', 'driver.last_name'] },
+          },
+        },
+        include: { definition: { select: { key: true } } },
+      }),
+    ]);
+    const vehicles = entities
+      .filter((entity) => entity.entityType === EntityType.VEHICLE)
+      .sort((left, right) => left.ordinal - right.ordinal);
+    const drivers = entities
+      .filter((entity) => entity.entityType === EntityType.DRIVER)
+      .sort((left, right) => left.ordinal - right.ordinal);
+    if (!vehicles.length || !drivers.length) return undefined;
+    const driverOptions = this.driverOptions(drivers, values);
+
+    const primaryByVehicle = new Map(
+      relationRows
+        .filter(
+          (relation) =>
+            relation.relationType === EntityRelationType.DRIVER_VEHICLE_PRIMARY,
+        )
+        .map((relation) => [relation.toEntityId, relation]),
+    );
+
+    for (const vehicle of vehicles) {
+      const primary = primaryByVehicle.get(vehicle.id);
+      if (!primary) {
+        return this.askEntityRelation({
+          leadId,
+          product,
+          vehicle,
+          prompt: 'PRIMARY_DRIVER',
+          relationType: EntityRelationType.DRIVER_VEHICLE_PRIMARY,
+          options: driverOptions,
+        });
+      }
+    }
+
+    for (const vehicle of vehicles) {
+      const primary = relationRows.find(
+        (relation) =>
+          relation.toEntityId === vehicle.id &&
+          relation.relationType === EntityRelationType.DRIVER_VEHICLE_PRIMARY,
+      );
+      if (!primary) continue;
+
+      const occasionalRelations = relationRows.filter(
+        (relation) =>
+          relation.toEntityId === vehicle.id &&
+          relation.relationType ===
+            EntityRelationType.DRIVER_VEHICLE_OCCASIONAL,
+      );
+      const remaining = driverOptions.filter(
+        (option) =>
+          option.entityId !== primary.fromEntityId &&
+          !occasionalRelations.some(
+            (relation) => relation.fromEntityId === option.entityId,
+          ),
+      );
+      if (!remaining.length) continue;
+
+      const proposed = attempts.find((attempt) => {
+        if (attempt.status !== CollectionAttemptStatus.PROPOSED) return false;
+        const metadata = (attempt.metadata ?? {}) as AssignmentMetadata;
+        return (
+          metadata.vehicleId === vehicle.id &&
+          (metadata.prompt === 'OCCASIONAL_DRIVER_EXISTS' ||
+            metadata.prompt === 'OCCASIONAL_DRIVER_SELECT')
+        );
+      });
+      if (proposed) {
+        const metadata = (proposed.metadata ?? {}) as AssignmentMetadata;
+        return this.relationActionFromAttempt(
+          proposed.id,
+          metadata.prompt!,
+          vehicle,
+          metadata.prompt === 'OCCASIONAL_DRIVER_SELECT'
+            ? remaining
+            : undefined,
+        );
+      }
+
+      const latestPrompt = attempts
+        .filter((attempt) => {
+          const metadata = (attempt.metadata ?? {}) as AssignmentMetadata;
+          return (
+            attempt.status === CollectionAttemptStatus.COMPLETED &&
+            metadata.vehicleId === vehicle.id &&
+            metadata.prompt === 'OCCASIONAL_DRIVER_EXISTS'
+          );
+        })
+        .sort(
+          (left, right) => right.createdAt.getTime() - left.createdAt.getTime(),
+        )[0];
+      if (latestPrompt) {
+        const metadata = (latestPrompt.metadata ?? {}) as AssignmentMetadata;
+        if (metadata.answer === false) continue;
+        const completedSelect = attempts.some((attempt) => {
+          const selectMetadata = (attempt.metadata ?? {}) as AssignmentMetadata;
+          return (
+            attempt.status === CollectionAttemptStatus.COMPLETED &&
+            selectMetadata.prompt === 'OCCASIONAL_DRIVER_SELECT' &&
+            selectMetadata.promptedByAttemptId === latestPrompt.id
+          );
+        });
+        if (!completedSelect) {
+          return this.askEntityRelation({
+            leadId,
+            product,
+            vehicle,
+            prompt: 'OCCASIONAL_DRIVER_SELECT',
+            relationType: EntityRelationType.DRIVER_VEHICLE_OCCASIONAL,
+            options: remaining,
+            promptedByAttemptId: latestPrompt.id,
+          });
+        }
+      }
+
+      return this.askEntityRelation({
+        leadId,
+        product,
+        vehicle,
+        prompt: 'OCCASIONAL_DRIVER_EXISTS',
+        relationType: EntityRelationType.DRIVER_VEHICLE_OCCASIONAL,
+      });
+    }
+    return undefined;
+  }
+
+  private async askEntityRelation(input: {
+    leadId: string;
+    product: SelectedProduct;
+    vehicle: DossierEntity;
+    prompt: RelationPrompt;
+    relationType: EntityRelationType;
+    options?: DriverOption[];
+    promptedByAttemptId?: string;
+  }): Promise<NextAction> {
+    const existing = await this.prisma.collectionAttempt.findFirst({
+      where: {
+        leadId: input.leadId,
+        actionType: CollectionActionType.ASSIGN_ENTITY_RELATION,
+        status: CollectionAttemptStatus.PROPOSED,
+        metadata: { path: ['vehicleId'], equals: input.vehicle.id },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    const attempt =
+      existing ??
+      (await this.prisma.collectionAttempt.create({
+        data: {
+          leadId: input.leadId,
+          actionType: CollectionActionType.ASSIGN_ENTITY_RELATION,
+          entityType: EntityType.VEHICLE,
+          entityId: input.vehicle.id,
+          product: input.product,
+          metadata: {
+            prompt: input.prompt,
+            vehicleId: input.vehicle.id,
+            vehicleOrdinal: input.vehicle.ordinal,
+            relationType: input.relationType,
+            ...(input.promptedByAttemptId
+              ? { promptedByAttemptId: input.promptedByAttemptId }
+              : {}),
+          },
+        },
+      }));
+    return this.relationActionFromAttempt(
+      attempt.id,
+      input.prompt,
+      input.vehicle,
+      input.options,
+    );
+  }
+
+  private relationActionFromAttempt(
+    actionId: string,
+    prompt: RelationPrompt,
+    vehicle: Pick<DossierEntity, 'id' | 'ordinal'>,
+    options?: DriverOption[],
+  ): NextAction {
+    const relationType =
+      prompt === 'PRIMARY_DRIVER'
+        ? EntityRelationType.DRIVER_VEHICLE_PRIMARY
+        : EntityRelationType.DRIVER_VEHICLE_OCCASIONAL;
+    const question =
+      prompt === 'PRIMARY_DRIVER'
+        ? `Qui conduit principalement le véhicule ${vehicle.ordinal} ?`
+        : prompt === 'OCCASIONAL_DRIVER_EXISTS'
+          ? 'Y a-t-il un autre conducteur qui utilise occasionnellement ce véhicule ?'
+          : `Qui utilise occasionnellement le véhicule ${vehicle.ordinal} ?`;
+    return {
+      type: 'ASSIGN_ENTITY_RELATION',
+      actionId,
+      relationType,
+      prompt,
+      sourceEntityType: 'DRIVER',
+      targetEntityType: 'VEHICLE',
+      targetEntityId: vehicle.id,
+      vehicleOrdinal: vehicle.ordinal,
+      vehicleLabel: `Véhicule ${vehicle.ordinal}`,
+      question,
+      ...(options ? { options } : {}),
+      input:
+        prompt === 'OCCASIONAL_DRIVER_EXISTS'
+          ? { type: 'YES_NO' }
+          : { type: 'SINGLE_CHOICE' },
+    };
+  }
+
+  private async answerEntityRelation(
+    leadId: string,
+    actionId: string,
+    value: unknown,
+    message?: string,
+  ) {
+    if (!this.relations)
+      throw new NotFoundException('Entity relation service not available');
+    const attempt = await this.prisma.collectionAttempt.findFirst({
+      where: {
+        id: actionId,
+        leadId,
+        actionType: CollectionActionType.ASSIGN_ENTITY_RELATION,
+      },
+    });
+    if (!attempt)
+      throw new NotFoundException('Entity relation action not found');
+    const metadata = (attempt.metadata ?? {}) as AssignmentMetadata;
+    if (!metadata.prompt || !metadata.vehicleId) {
+      throw new NotFoundException('Entity relation action is incomplete');
+    }
+    if (attempt.status !== CollectionAttemptStatus.PROPOSED) {
+      return { nextAction: await this.selectForLead(leadId) };
+    }
+    if (message) await this.conversations.addCustomerMessage(leadId, message);
+
+    if (metadata.prompt === 'OCCASIONAL_DRIVER_EXISTS') {
+      if (typeof value !== 'boolean') {
+        throw new BadRequestException(
+          'Occasional driver answer must be true or false',
+        );
+      }
+      await this.prisma.collectionAttempt.update({
+        where: { id: actionId },
+        data: {
+          status: CollectionAttemptStatus.COMPLETED,
+          resolvedAt: new Date(),
+          metadata: { ...metadata, answer: value },
+        },
+      });
+      return { nextAction: await this.selectForLead(leadId) };
+    }
+
+    if (typeof value !== 'string') {
+      throw new BadRequestException('Driver selection must be a driver id');
+    }
+    if (metadata.prompt === 'PRIMARY_DRIVER') {
+      await this.relations.assignPrimaryDriver(metadata.vehicleId, value);
+    } else {
+      const allowed = await this.availableOccasionalDriverIds(
+        metadata.vehicleId,
+      );
+      if (!allowed.has(value)) {
+        throw new BadRequestException(
+          'Driver is not available for this vehicle',
+        );
+      }
+      await this.relations.addOccasionalDriver(metadata.vehicleId, value);
+    }
+    await this.prisma.collectionAttempt.update({
+      where: { id: actionId },
+      data: {
+        status: CollectionAttemptStatus.COMPLETED,
+        resolvedAt: new Date(),
+        metadata: { ...metadata, answer: value, driverId: value },
+      },
+    });
+    return { nextAction: await this.selectForLead(leadId) };
+  }
+
+  private async availableOccasionalDriverIds(vehicleId: string) {
+    const vehicle = await this.prisma.dossierEntity.findUnique({
+      where: { id: vehicleId },
+      select: { customerFolderId: true },
+    });
+    if (!vehicle) return new Set<string>();
+    const [drivers, relations] = await Promise.all([
+      this.prisma.dossierEntity.findMany({
+        where: {
+          customerFolderId: vehicle.customerFolderId,
+          entityType: EntityType.DRIVER,
+        },
+        select: { id: true },
+      }),
+      this.prisma.entityRelation.findMany({
+        where: {
+          customerFolderId: vehicle.customerFolderId,
+          toEntityId: vehicleId,
+          relationType: {
+            in: [
+              EntityRelationType.DRIVER_VEHICLE_PRIMARY,
+              EntityRelationType.DRIVER_VEHICLE_OCCASIONAL,
+            ],
+          },
+        },
+        select: { fromEntityId: true },
+      }),
+    ]);
+    const alreadyAssigned = new Set(
+      relations.map((relation) => relation.fromEntityId),
+    );
+    return new Set(
+      drivers
+        .map((driver) => driver.id)
+        .filter((driverId) => !alreadyAssigned.has(driverId)),
+    );
+  }
+
+  private driverOptions(
+    drivers: DossierEntity[],
+    values: Array<{
+      entityId: string | null;
+      value: unknown;
+      definition: { key: string };
+    }>,
+  ): DriverOption[] {
+    return drivers.map((driver) => {
+      const first = values.find(
+        (value) =>
+          value.entityId === driver.id &&
+          value.definition.key === 'driver.first_name',
+      )?.value;
+      const last = values.find(
+        (value) =>
+          value.entityId === driver.id &&
+          value.definition.key === 'driver.last_name',
+      )?.value;
+      const label = [first, last]
+        .filter((part) => typeof part === 'string' && part.trim())
+        .join(' ');
+      return {
+        entityId: driver.id,
+        label: label || `Conducteur ${driver.ordinal}`,
+      };
+    });
+  }
+
   private loopQuestion(loop: CollectionLoop) {
     if (loop.entityType === EntityType.DRIVER) {
       return 'Do you want to add another driver?';
+    }
+    if (loop.entityType === EntityType.VEHICLE) {
+      return 'Voulez-vous ajouter un autre véhicule ?';
     }
     return 'Do you want to add another claim?';
   }
@@ -537,6 +1148,9 @@ export class CollectionStrategyService {
   private loopLabel(loop: CollectionLoop) {
     if (loop.entityType === EntityType.DRIVER) {
       return `Additional driver ${Math.max(1, loop.currentOrdinal - 1)}`;
+    }
+    if (loop.entityType === EntityType.VEHICLE) {
+      return `Véhicule ${loop.currentOrdinal}`;
     }
     const domain =
       loop.domain === EntityDomain.AUTO

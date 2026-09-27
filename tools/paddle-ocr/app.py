@@ -9,10 +9,12 @@ import threading
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from PIL import Image
+from pillow_heif import register_heif_opener
 import pypdfium2 as pdfium
 import numpy as np
 
 os.environ.setdefault("FLAGS_use_mkldnn", "0")
+register_heif_opener()
 
 MAX_BYTES = int(os.getenv("OCR_MAX_BYTES", str(10 * 1024 * 1024)))
 app = FastAPI(docs_url=None, redoc_url=None)
@@ -55,7 +57,7 @@ async def ocr(file: UploadFile = File(...)):
     data = await file.read(MAX_BYTES + 1)
     if len(data) > MAX_BYTES:
         raise HTTPException(413, "OCR input exceeds size limit")
-    if file.content_type not in {"image/jpeg", "image/png", "image/webp", "application/pdf"}:
+    if file.content_type not in {"image/jpeg", "image/png", "image/heic", "image/heif", "application/pdf"}:
         raise HTTPException(415, "OCR helper accepts images only")
     try:
         if file.content_type == "application/pdf":

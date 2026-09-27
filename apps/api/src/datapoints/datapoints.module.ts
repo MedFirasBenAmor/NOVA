@@ -3,6 +3,7 @@ import { DatapointsController } from './datapoints.controller';
 import { DatapointsService } from './datapoints.service';
 import { RequirementProfileService } from './requirement-profile.service';
 import { EntityLifecycleService } from './entity-lifecycle.service';
+import { EntityRelationService } from './entity-relation.service';
 import { SectionReviewService } from './section-review.service';
 import { QuestionSequenceService } from './question-sequence.service';
 
@@ -12,6 +13,7 @@ import { QuestionSequenceService } from './question-sequence.service';
     DatapointsService,
     RequirementProfileService,
     EntityLifecycleService,
+    EntityRelationService,
     SectionReviewService,
     QuestionSequenceService,
   ],
@@ -19,6 +21,7 @@ import { QuestionSequenceService } from './question-sequence.service';
     DatapointsService,
     RequirementProfileService,
     EntityLifecycleService,
+    EntityRelationService,
     SectionReviewService,
     QuestionSequenceService,
   ],
