@@ -32,7 +32,10 @@ export class LeadsController {
       sessionToken,
       {
         httpOnly: true,
-        sameSite: 'lax',
+        sameSite: this.config.get<'lax' | 'strict' | 'none'>(
+          'ANONYMOUS_SESSION_COOKIE_SAME_SITE',
+          'lax',
+        ),
         secure: this.config.get('NODE_ENV') === 'production',
         maxAge:
           this.config.get<number>('ANONYMOUS_SESSION_TTL_SECONDS', 86400) *

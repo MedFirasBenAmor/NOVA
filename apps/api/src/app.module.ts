@@ -42,6 +42,9 @@ import { AuthModule } from './auth/auth.module';
           .positive()
           .default(86400),
         ANONYMOUS_SESSION_COOKIE_NAME: Joi.string().default('nova_session'),
+        ANONYMOUS_SESSION_COOKIE_SAME_SITE: Joi.string()
+          .valid('lax', 'strict', 'none')
+          .default('lax'),
         REDIS_HOST: Joi.string().default('localhost'),
         REDIS_PORT: Joi.number().port().default(6379),
         OCR_PROVIDER: Joi.string().valid('mock', 'paddle').default('mock'),
