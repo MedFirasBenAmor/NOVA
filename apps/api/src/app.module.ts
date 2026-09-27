@@ -25,12 +25,14 @@ import { AuthModule } from './auth/auth.module';
         API_PORT: Joi.number().port().default(3001),
         WEB_ORIGIN: Joi.string().uri().default('http://localhost:3000'),
         DATABASE_URL: Joi.string().uri().required(),
+        PRISMA_CONNECT_ON_INIT: Joi.boolean().default(true),
         AI_PROVIDER: Joi.string().valid('mock', 'gemini').default('mock'),
         GEMINI_API_KEY: Joi.string().allow('').optional(),
         GEMINI_MODEL: Joi.string().default('gemini-3.7-flash'),
         GEMINI_TIMEOUT_MS: Joi.number().integer().positive().default(30000),
         DOCUMENT_STORAGE_PROVIDER: Joi.string().valid('local').default('local'),
         DOCUMENT_STORAGE_PATH: Joi.string().default('./var/documents'),
+        DOCUMENT_WORKER_ENABLED: Joi.boolean().default(true),
         MAX_DOCUMENT_UPLOAD_BYTES: Joi.number()
           .integer()
           .positive()

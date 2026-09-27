@@ -12,6 +12,10 @@ export class DocumentWorkerService implements OnModuleInit, OnModuleDestroy {
     private readonly processor: DocumentProcessorService,
   ) {}
   onModuleInit() {
+    if (!this.config.get<boolean>('DOCUMENT_WORKER_ENABLED', true)) {
+      return;
+    }
+
     this.worker = new Worker(
       DOCUMENT_QUEUE,
       (job: Job<{ documentId: string }>) =>

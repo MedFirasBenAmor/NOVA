@@ -6,8 +6,12 @@ export const DOCUMENT_QUEUE = 'document-processing';
 
 @Injectable()
 export class DocumentQueueService implements OnModuleDestroy {
-  private readonly queue: Queue;
+  private readonly queue?: Queue;
   constructor(config: ConfigService) {
+    if (!config.get<boolean>('DOCUMENT_WORKER_ENABLED', true)) {
+      return;
+    }
+
     this.queue = new Queue(DOCUMENT_QUEUE, {
       connection: {
         host: config.get<string>('REDIS_HOST', 'localhost'),
@@ -16,6 +20,10 @@ export class DocumentQueueService implements OnModuleDestroy {
     });
   }
   enqueue(documentId: string) {
+    if (!this.queue) {
+      return Promise.resolve({ id: documentId });
+    }
+
     return this.queue.add(
       'PROCESS_DOCUMENT',
       { documentId },
@@ -23,6 +31,6 @@ export class DocumentQueueService implements OnModuleDestroy {
     );
   }
   onModuleDestroy() {
-    return this.queue.close();
+    return this.queue?.close();
   }
 }
