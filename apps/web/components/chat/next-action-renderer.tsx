@@ -34,12 +34,15 @@ export function NextActionRenderer({
       >
         <Check className="mb-2 size-5 text-nova-success" aria-hidden="true" />
         <p className="font-medium text-nova-navy">
-          Great — NOVA has the information currently required for this step.
+          {action.message ??
+            'Great — NOVA has the information currently required for this step.'}
         </p>
-        <p className="mt-1 text-sm text-nova-success">
-          This is a completeness milestone, not an eligibility or approval
-          decision.
-        </p>
+        {action.message ? null : (
+          <p className="mt-1 text-sm text-nova-success">
+            This is a completeness milestone, not an eligibility or approval
+            decision.
+          </p>
+        )}
       </Card>
     );
 
@@ -233,11 +236,7 @@ export function NextActionRenderer({
 
   if (action.type === 'ASK_GROUPED_DATAPOINTS')
     return (
-      <GroupedDatapoints
-        action={action}
-        onAnswer={onAnswer}
-        busy={busy}
-      />
+      <GroupedDatapoints action={action} onAnswer={onAnswer} busy={busy} />
     );
 
   if (action.type === 'CONFIRM_DATAPOINT')
@@ -287,7 +286,9 @@ function GroupedDatapoints({
   const [values, setValues] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const fields = action.datapoints;
-  const complete = fields.every((field) => (values[field.key] ?? '').trim());
+  const complete = fields.every(
+    (field) => field.optional || (values[field.key] ?? '').trim(),
+  );
   const submit = async () => {
     if (!complete || busy) return;
     setSubmitting(true);
@@ -297,7 +298,7 @@ function GroupedDatapoints({
   return (
     <Card padding="lg">
       <p className="mb-3 font-medium text-nova-navy">
-        {action.title ?? 'A few details together'}
+        {action.question ?? action.title ?? 'A few details together'}
       </p>
       <div className="space-y-3">
         {fields.map((field) => (
@@ -308,25 +309,54 @@ function GroupedDatapoints({
             >
               {field.label ?? display(field.key)}
             </label>
-            <input
-              id={`grouped-${field.key}`}
-              type={
-                field.input?.type === 'NUMBER'
-                  ? 'number'
-                  : field.input?.type === 'DATE'
-                    ? 'date'
-                    : 'text'
-              }
-              value={values[field.key] ?? ''}
-              disabled={busy || submitting}
-              onChange={(event) =>
-                setValues((current) => ({
-                  ...current,
-                  [field.key]: event.target.value,
-                }))
-              }
-              className="mt-1 h-12 w-full rounded-2xl border border-nova-border px-3 text-sm text-nova-navy outline-none focus:border-nova-blue focus:ring-2 focus:ring-nova-blue/15"
-            />
+            {field.input?.type === 'YES_NO' ? (
+              <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                {[
+                  { value: 'true', label: 'Oui' },
+                  { value: 'false', label: 'Non' },
+                ].map((option) => (
+                  <Button
+                    key={option.value}
+                    type="button"
+                    variant={
+                      values[field.key] === option.value
+                        ? 'primary'
+                        : 'secondary'
+                    }
+                    size="md"
+                    disabled={busy || submitting}
+                    onClick={() =>
+                      setValues((current) => ({
+                        ...current,
+                        [field.key]: option.value,
+                      }))
+                    }
+                  >
+                    {option.label}
+                  </Button>
+                ))}
+              </div>
+            ) : (
+              <input
+                id={`grouped-${field.key}`}
+                type={
+                  field.input?.type === 'NUMBER'
+                    ? 'number'
+                    : field.input?.type === 'DATE'
+                      ? 'date'
+                      : 'text'
+                }
+                value={values[field.key] ?? ''}
+                disabled={busy || submitting}
+                onChange={(event) =>
+                  setValues((current) => ({
+                    ...current,
+                    [field.key]: event.target.value,
+                  }))
+                }
+                className="mt-1 h-12 w-full rounded-2xl border border-nova-border px-3 text-sm text-nova-navy outline-none focus:border-nova-blue focus:ring-2 focus:ring-nova-blue/15"
+              />
+            )}
           </div>
         ))}
       </div>
@@ -577,7 +607,11 @@ function AskDatapoint({
 }) {
   const [value, setValue] = useState('');
   const [multiValue, setMultiValue] = useState<string[]>([]);
-  const label = action.datapoint.label ?? display(action.datapoint.key);
+  const [showSpecificDate, setShowSpecificDate] = useState(false);
+  const label =
+    action.datapoint.question ??
+    action.datapoint.label ??
+    display(action.datapoint.key);
   const entityLabel = action.datapoint.entityLabel ? (
     <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-nova-muted">
       {action.datapoint.entityLabel}
@@ -596,11 +630,55 @@ function AskDatapoint({
         </p>
       </Card>
     );
+  if (action.input.type === 'DATE_CHOICE')
+    return (
+      <Card padding="lg">
+        {entityLabel}
+        <p className="font-medium text-nova-navy">{label}</p>
+        <div className="mt-3 grid gap-2 sm:grid-cols-3">
+          {action.input.options.map((option) => (
+            <Button
+              key={option.value}
+              variant="secondary"
+              size="md"
+              disabled={busy}
+              onClick={() => {
+                if (option.value === 'SPECIFIC') {
+                  setShowSpecificDate(true);
+                  return;
+                }
+                onAnswer(resolveDateChoice(option.value), option.label);
+              }}
+            >
+              {option.label}
+            </Button>
+          ))}
+        </div>
+        {showSpecificDate ? (
+          <form
+            onSubmit={submit}
+            className="mt-3 flex flex-col gap-2 sm:flex-row"
+          >
+            <input
+              aria-label="Date spécifique"
+              type="date"
+              value={value}
+              onChange={(event) => setValue(event.target.value)}
+              className="h-12 flex-1 rounded-2xl border border-nova-border px-3 text-sm text-nova-navy outline-none focus:border-nova-blue focus:ring-2 focus:ring-nova-blue/15"
+            />
+            <Button type="submit" size="md" disabled={busy || !value.trim()}>
+              Continue
+            </Button>
+          </form>
+        ) : null}
+      </Card>
+    );
+
   if (action.input.type === 'MULTI_CHOICE')
     return (
       <Card padding="lg">
         {entityLabel}
-        <p className="font-medium text-nova-navy">{label}?</p>
+        <p className="font-medium text-nova-navy">{label}</p>
         <div className="mt-3 grid gap-2 sm:grid-cols-2">
           {action.input.options.map((option) => {
             const checked = multiValue.includes(option.value);
@@ -646,12 +724,12 @@ function AskDatapoint({
     return (
       <Card padding="lg">
         {entityLabel}
-        <p className="font-medium text-nova-navy">{label}?</p>
+        <p className="font-medium text-nova-navy">{label}</p>
         <div className="mt-3 grid gap-2 sm:grid-cols-2">
           {(action.input.type === 'YES_NO'
             ? [
-                { value: true, label: 'Yes' },
-                { value: false, label: 'No' },
+                { value: true, label: 'Oui' },
+                { value: false, label: 'Non' },
               ]
             : action.input.options
           ).map((option) => (
@@ -676,7 +754,7 @@ function AskDatapoint({
           className="block font-medium text-nova-navy"
           htmlFor="datapoint-answer"
         >
-          {label}?
+          {label}
         </label>
         <input
           id="datapoint-answer"
@@ -702,4 +780,10 @@ function AskDatapoint({
       </Card>
     </form>
   );
+}
+
+function resolveDateChoice(value: 'TODAY' | 'FEW_DAYS') {
+  const date = new Date();
+  if (value === 'FEW_DAYS') date.setDate(date.getDate() + 3);
+  return date.toISOString().slice(0, 10);
 }

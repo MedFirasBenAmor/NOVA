@@ -28,16 +28,16 @@ const keysFor = (product: Product) => {
 
 describe('RequirementProfileService catalog contract', () => {
   it('matches exact R1 catalog counts and requirement breakdown', () => {
-    expect(productCount(Product.COMMON)).toBe(21);
-    expect(productCount(Product.AUTO)).toBe(48);
+    expect(productCount(Product.COMMON)).toBe(29);
+    expect(productCount(Product.AUTO)).toBe(64);
     expect(productCount(Product.HOME)).toBe(71);
     expect(
       productCount(Product.COMMON) +
         productCount(Product.AUTO) +
         productCount(Product.HOME),
-    ).toBe(140);
-    expect(requirementCount(RequirementType.REQUIRED)).toBe(77);
-    expect(requirementCount(RequirementType.OPTIONAL)).toBe(35);
+    ).toBe(164);
+    expect(requirementCount(RequirementType.REQUIRED)).toBe(82);
+    expect(requirementCount(RequirementType.OPTIONAL)).toBe(54);
     expect(requirementCount(RequirementType.CONDITIONAL)).toBe(28);
   });
 
@@ -73,9 +73,9 @@ describe('RequirementProfileService catalog contract', () => {
         .productsFor(Product.AUTO_HOME)
         .filter((p) => p === Product.COMMON),
     ).toHaveLength(1);
-    expect(20 + 48).toBe(68);
-    expect(20 + 71).toBe(91);
-    expect(20 + 48 + 71).toBe(139);
+    expect(29 + 64).toBe(93);
+    expect(29 + 71).toBe(100);
+    expect(29 + 64 + 71).toBe(164);
   });
 
   it('keeps AUTO and HOME product-only requirements isolated', () => {
@@ -100,7 +100,11 @@ describe('RequirementProfileService catalog contract', () => {
 
   it('keeps finite choices catalog-driven and booleans as YES_NO inputs', () => {
     const source = seed();
-    expect(source).toContain("allowedValues: ['NEW', 'USED', 'DEMO']");
+    expect(source).toContain(
+      "validationRules: { allowedValues: ['Neuf', 'Usagé', 'Démonstrateur'] }",
+    );
+    expect(source).toContain("'auto.current_insurer_tenure_band'");
+    expect(source).toContain("'LESS_THAN_1_YEAR'");
     expect(source).toContain("allowedValues: ['OWNER', 'TENANT', 'LANDLORD']");
     expect(source).toContain('BUNDLE_POLICIES');
     expect(source).toContain('TENANT_OCCUPANT');

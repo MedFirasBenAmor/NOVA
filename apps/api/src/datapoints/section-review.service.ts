@@ -149,6 +149,7 @@ const sections: SectionDefinition[] = [
 
 const categorySection: Record<string, ReviewSectionCode> = {
   CUSTOMER: 'PERSONAL',
+  CUSTOMER_ADDRESS: 'PERSONAL',
   CONTACT: 'CONTACT_ADDRESS',
   ADDRESS: 'CONTACT_ADDRESS',
   REQUEST: 'REQUEST_CONSENTS',

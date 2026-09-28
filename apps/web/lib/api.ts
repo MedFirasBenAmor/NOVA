@@ -12,6 +12,11 @@ export class ApiError extends Error {
   constructor(
     message: string,
     readonly status: number,
+    readonly details?: {
+      endpoint: string;
+      body: unknown;
+      requestBody?: unknown;
+    },
   ) {
     super(message);
   }
@@ -50,7 +55,12 @@ function errorMessage(body: unknown, fallback: string) {
   return fallback;
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+async function request<T>(
+  path: string,
+  init?: RequestInit,
+  debug?: { datapointKey?: string },
+): Promise<T> {
+  const requestBody = parseRequestBody(init?.body);
   const response = await fetch(`${baseUrl}${path}`, {
     ...init,
     credentials: 'include',
@@ -58,12 +68,41 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
   if (!response.ok) {
     const body = await response.json().catch(() => null);
+    console.warn('NOVA API request failed', {
+      endpoint: `${baseUrl}${path}`,
+      status: response.status,
+      backend: body,
+      datapointKey:
+        debug?.datapointKey ?? datapointKeyFromRequestBody(requestBody),
+      submittedValue: submittedValueFromRequestBody(requestBody),
+    });
     throw new ApiError(
       errorMessage(body, `Request failed (${response.status})`),
       response.status,
+      { endpoint: `${baseUrl}${path}`, body, requestBody },
     );
   }
   return response.json() as Promise<T>;
+}
+
+function parseRequestBody(body: BodyInit | null | undefined) {
+  if (typeof body !== 'string') return undefined;
+  try {
+    return JSON.parse(body) as unknown;
+  } catch {
+    return undefined;
+  }
+}
+
+function submittedValueFromRequestBody(body: unknown) {
+  return body && typeof body === 'object'
+    ? (body as { value?: unknown }).value
+    : undefined;
+}
+
+function datapointKeyFromRequestBody(body: unknown) {
+  if (!body || typeof body !== 'object') return undefined;
+  return (body as { key?: unknown }).key;
 }
 
 export type ConversationMessage = {
@@ -126,10 +165,17 @@ export const api = {
       `/leads/${leadId}/collection-actions/${actionId}/respond`,
       { method: 'POST', body: JSON.stringify({ decision }) },
     ),
-  answer: (leadId: string, actionId: string, value: unknown, message: string) =>
+  answer: (
+    leadId: string,
+    actionId: string,
+    value: unknown,
+    message: string,
+    datapointKey?: string,
+  ) =>
     request<{ nextAction: NextAction; completeness: CompletenessResponse }>(
       `/leads/${leadId}/collection-actions/${actionId}/answer`,
       { method: 'POST', body: JSON.stringify({ value, message }) },
+      { datapointKey },
     ),
   currentAction: (leadId: string) =>
     request<{ nextAction: NextAction }>(
@@ -167,6 +213,7 @@ export const api = {
       throw new ApiError(
         errorMessage(body, `Upload failed (${response.status})`),
         response.status,
+        { endpoint: `${baseUrl}/leads/${leadId}/documents`, body },
       );
     }
     return response.json() as Promise<DocumentUploadResponse>;

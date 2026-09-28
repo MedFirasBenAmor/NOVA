@@ -95,6 +95,27 @@ export function Transcript({
     >
       {messages.map((message) => {
         const isCustomer = message.role === 'CUSTOMER';
+        const hasContent =
+          typeof message.content === 'string' && message.content.trim().length > 0;
+        const actionNode =
+          message.action && actionKey(message.action) === actionKey(action) ? (
+            <NextActionRenderer
+              action={message.action}
+              onAnswer={onAnswer}
+              onDecision={onDecision}
+              onReviewEdit={onReviewEdit}
+              onUpload={onUpload}
+              busy={busy}
+            />
+          ) : null;
+        if (!isCustomer && !hasContent && actionNode) {
+          return (
+            <div key={message.id} className="flex items-start gap-2.5 sm:gap-3">
+              {actionNode}
+            </div>
+          );
+        }
+        if (!isCustomer && !hasContent) return null;
         return (
           <div key={message.id} className={isCustomer ? 'flex justify-end' : ''}>
             {isCustomer ? (
@@ -102,19 +123,7 @@ export function Transcript({
             ) : (
               <AssistantMessage>
                 <div className="whitespace-pre-line">{message.content}</div>
-                {message.action &&
-                  actionKey(message.action) === actionKey(action) && (
-                    <div className="mt-3">
-                      <NextActionRenderer
-                        action={message.action}
-                        onAnswer={onAnswer}
-                        onDecision={onDecision}
-                        onReviewEdit={onReviewEdit}
-                        onUpload={onUpload}
-                        busy={busy}
-                      />
-                    </div>
-                  )}
+                {actionNode ? <div className="mt-3">{actionNode}</div> : null}
               </AssistantMessage>
             )}
           </div>

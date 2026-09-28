@@ -35,6 +35,16 @@ import { SectionReviewService } from '../datapoints/section-review.service';
 import { buildInputContract } from '../datapoints/input-contract';
 import { QuestionSequenceService } from '../datapoints/question-sequence.service';
 import { EntityRelationService } from '../datapoints/entity-relation.service';
+import {
+  AUTO_CLAIM_CARDS,
+  AUTO_CLOSING_TEXT,
+  AUTO_CONSENT_CARD,
+  AUTO_CUSTOMER_CARDS,
+  AUTO_DRIVER_CARDS,
+  AUTO_PROTECTION_CARDS,
+  AUTO_VEHICLE_CARDS,
+  type AutoFlowCard,
+} from './auto-phone-flow.fr-ca';
 
 type RelationPrompt =
   'PRIMARY_DRIVER' | 'OCCASIONAL_DRIVER_EXISTS' | 'OCCASIONAL_DRIVER_SELECT';
@@ -55,6 +65,13 @@ type AssignmentMetadata = {
   promptedByAttemptId?: string;
   answer?: unknown;
   driverId?: string;
+};
+
+type AutoFlowMetadata = {
+  autoFlowCardId?: string;
+  key?: string;
+  keys?: string[];
+  optionalKeys?: string[];
 };
 
 @Injectable()
@@ -111,6 +128,19 @@ export class CollectionStrategyService {
     const orderedMissing = this.sequence
       ? this.sequence.orderedMissing(product, definitions, completeness.missing)
       : completeness.missing;
+    if (product === Product.AUTO && this.canUseAutoPhoneFlow()) {
+      const canonicalAction = await this.autoPhoneFlowAction(leadId, product);
+      if (canonicalAction) return canonicalAction;
+      await this.prisma.lead.update({
+        where: { id: leadId },
+        data: { intakePhase: IntakePhase.COMPLETE },
+      });
+      return {
+        type: 'COMPLETE',
+        actionId: randomUUID(),
+        message: AUTO_CLOSING_TEXT,
+      };
+    }
     if (documents[0]) {
       return {
         type: 'WAIT_FOR_PROCESSING',
@@ -375,19 +405,38 @@ export class CollectionStrategyService {
     if (attempt.actionType !== CollectionActionType.ASK_DATAPOINT) {
       throw new NotFoundException('Datapoint action not found');
     }
-    const metadata = (attempt.metadata ?? {}) as { key?: string };
+    const metadata = (attempt.metadata ?? {}) as AutoFlowMetadata;
     if (!metadata.key || !attempt.entityType)
       throw new NotFoundException('Datapoint action is incomplete');
     if (message) await this.conversations.addCustomerMessage(leadId, message);
+    const storedValue =
+      metadata.autoFlowCardId === 'CARD_37' && typeof value === 'string'
+        ? Number(value)
+        : value;
     const datapoint = await this.datapoints.upsert(leadId, {
       key: metadata.key,
-      value,
+      value: storedValue,
       entityType: attempt.entityType,
       entityId: attempt.entityId ?? undefined,
       sourceType: 'CUSTOMER_FORM',
       collectionMethod: 'MANUAL_QUESTION',
       sourceReferenceId: actionId,
     });
+    if (
+      metadata.autoFlowCardId === 'CARD_23' &&
+      attempt.entityId &&
+      typeof value === 'string'
+    ) {
+      await this.datapoints.upsert(leadId, {
+        key: 'vehicle.commercial_use',
+        value: value !== 'Non',
+        entityType: attempt.entityType,
+        entityId: attempt.entityId,
+        sourceType: 'CUSTOMER_FORM',
+        collectionMethod: 'DERIVED',
+        sourceReferenceId: actionId,
+      });
+    }
     await this.prisma.collectionAttempt.update({
       where: { id: actionId },
       data: {
@@ -537,26 +586,40 @@ export class CollectionStrategyService {
         actionType: CollectionActionType.ASK_GROUPED_DATAPOINTS,
       },
     });
-    if (!attempt) throw new NotFoundException('Grouped datapoint action not found');
+    if (!attempt)
+      throw new NotFoundException('Grouped datapoint action not found');
     if (attempt.status !== CollectionAttemptStatus.PROPOSED) {
       return { nextAction: await this.selectForLead(leadId) };
     }
     const metadata = (attempt.metadata ?? {}) as { keys?: string[] };
+    const autoMetadata = (attempt.metadata ?? {}) as AutoFlowMetadata;
     if (!attempt.entityType || !Array.isArray(metadata.keys)) {
       throw new NotFoundException('Grouped datapoint action is incomplete');
     }
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
-      throw new BadRequestException('Grouped datapoints require an object value');
+      throw new BadRequestException(
+        'Grouped datapoints require an object value',
+      );
     }
     const values = value as Record<string, unknown>;
     if (message) await this.conversations.addCustomerMessage(leadId, message);
     for (const key of metadata.keys) {
-      if (!(key in values) || values[key] === '' || values[key] === null) {
+      const optional = autoMetadata.optionalKeys?.includes(key) ?? false;
+      if (
+        !optional &&
+        (!(key in values) || values[key] === '' || values[key] === null)
+      ) {
         throw new BadRequestException(`${key} is required`);
       }
+      if (optional && (!(key in values) || values[key] === '')) continue;
       await this.datapoints.upsert(leadId, {
         key,
-        value: values[key],
+        value:
+          values[key] === 'true'
+            ? true
+            : values[key] === 'false'
+              ? false
+              : values[key],
         entityType: attempt.entityType,
         entityId: attempt.entityId ?? undefined,
         sourceType: 'CUSTOMER_FORM',
@@ -741,6 +804,247 @@ export class CollectionStrategyService {
     };
   }
 
+  private async autoPhoneFlowAction(
+    leadId: string,
+    product: SelectedProduct,
+  ): Promise<NextAction | undefined> {
+    const folder = await this.prisma.customerFolder.upsert({
+      where: { leadId },
+      update: {},
+      create: { leadId },
+    });
+    await this.entities.ensurePrimaryEntitiesForProduct(leadId, product);
+    await this.entities.ensureVehicleLoop(leadId);
+    const [values, vehicles, drivers, claims] = await Promise.all([
+      this.prisma.datapointValue.findMany({
+        where: { customerFolderId: folder.id },
+        include: { definition: { select: { key: true } } },
+      }),
+      this.prisma.dossierEntity.findMany({
+        where: { customerFolderId: folder.id, entityType: EntityType.VEHICLE },
+        orderBy: [{ ordinal: 'asc' }],
+      }),
+      this.prisma.dossierEntity.findMany({
+        where: { customerFolderId: folder.id, entityType: EntityType.DRIVER },
+        orderBy: [{ ordinal: 'asc' }],
+      }),
+      this.prisma.dossierEntity.findMany({
+        where: {
+          customerFolderId: folder.id,
+          entityType: EntityType.CLAIM,
+          domain: EntityDomain.AUTO,
+        },
+        orderBy: [{ ordinal: 'asc' }],
+      }),
+    ]);
+    const valueFor = (key: string, entityId?: string) =>
+      values.find(
+        (value) =>
+          value.definition.key === key &&
+          (entityId ? value.entityId === entityId : value.entityId === null),
+      )?.value;
+
+    for (const card of AUTO_CUSTOMER_CARDS) {
+      if (this.cardMissing(card, valueFor)) {
+        return this.askAutoFlowCard(leadId, product, card);
+      }
+    }
+
+    const loop = await this.entities.ensureVehicleLoop(leadId);
+    const activeVehicles = vehicles.sort(
+      (left, right) => left.ordinal - right.ordinal,
+    );
+    for (const vehicle of activeVehicles) {
+      for (const card of AUTO_VEHICLE_CARDS) {
+        if (
+          !this.cardConditionMatches(card, (key) => valueFor(key, vehicle.id))
+        )
+          continue;
+        if (this.cardMissing(card, (key) => valueFor(key, vehicle.id))) {
+          return this.askAutoFlowCard(leadId, product, card, vehicle);
+        }
+      }
+      if (loop.status !== 'CLOSED' && loop.currentOrdinal === vehicle.ordinal) {
+        return this.askAddAnother(leadId, product, loop);
+      }
+    }
+
+    const primaryDriver = drivers.find((driver) => driver.ordinal === 1);
+    if (primaryDriver) {
+      for (const card of AUTO_DRIVER_CARDS) {
+        const entityId =
+          card.entityType === EntityType.DRIVER ? primaryDriver.id : undefined;
+        if (this.cardMissing(card, (key) => valueFor(key, entityId))) {
+          return this.askAutoFlowCard(
+            leadId,
+            product,
+            card,
+            card.entityType === EntityType.DRIVER ? primaryDriver : undefined,
+          );
+        }
+      }
+    }
+
+    if (valueFor('auto.has_claims_last_6_years') === true) {
+      await this.entities.ensureTriggeredEntities(leadId, product);
+      const claim =
+        claims[0] ??
+        (await this.prisma.dossierEntity.findFirst({
+          where: {
+            customerFolderId: folder.id,
+            entityType: EntityType.CLAIM,
+            domain: EntityDomain.AUTO,
+            ordinal: 1,
+          },
+        }));
+      if (claim) {
+        for (const card of AUTO_CLAIM_CARDS) {
+          if (this.cardMissing(card, (key) => valueFor(key, claim.id))) {
+            return this.askAutoFlowCard(leadId, product, card, claim);
+          }
+        }
+      }
+    }
+
+    const relationAction = await this.assignmentAction(leadId, product);
+    if (relationAction) return relationAction;
+
+    const firstVehicle = activeVehicles[0];
+    if (firstVehicle) {
+      for (const card of AUTO_PROTECTION_CARDS) {
+        if (this.cardMissing(card, (key) => valueFor(key, firstVehicle.id))) {
+          return this.askAutoFlowCard(leadId, product, card, firstVehicle);
+        }
+      }
+    }
+
+    if (this.cardMissing(AUTO_CONSENT_CARD, (key) => valueFor(key))) {
+      return this.askAutoFlowCard(leadId, product, AUTO_CONSENT_CARD);
+    }
+    return undefined;
+  }
+
+  private canUseAutoPhoneFlow() {
+    return typeof this.prisma.customerFolder?.upsert === 'function';
+  }
+
+  private cardMissing(card: AutoFlowCard, valueFor: (key: string) => unknown) {
+    if (!this.cardConditionMatches(card, valueFor)) return false;
+    if (card.groupedFields) {
+      return card.groupedFields
+        .filter((field) => !field.optional)
+        .some((field) => valueFor(field.key) === undefined);
+    }
+    return card.datapointKeys.some((key) => valueFor(key) === undefined);
+  }
+
+  private cardConditionMatches(
+    card: AutoFlowCard,
+    valueFor: (key: string) => unknown,
+  ) {
+    if (!card.condition) return true;
+    const observed = valueFor(card.condition.key);
+    if (card.condition.operator === 'EQ')
+      return observed === card.condition.value;
+    return Array.isArray(card.condition.value)
+      ? card.condition.value.includes(observed)
+      : false;
+  }
+
+  private async askAutoFlowCard(
+    leadId: string,
+    product: SelectedProduct,
+    card: AutoFlowCard,
+    entity?: Pick<DossierEntity, 'id' | 'entityType' | 'ordinal'>,
+  ): Promise<NextAction> {
+    if (card.groupedFields) {
+      const existing = await this.prisma.collectionAttempt.findFirst({
+        where: {
+          leadId,
+          actionType: CollectionActionType.ASK_GROUPED_DATAPOINTS,
+          status: CollectionAttemptStatus.PROPOSED,
+          metadata: { path: ['autoFlowCardId'], equals: card.cardId },
+          ...(entity?.id ? { entityId: entity.id } : {}),
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+      const keys = card.groupedFields.map((field) => field.key);
+      const optionalKeys = card.groupedFields
+        .filter((field) => field.optional)
+        .map((field) => field.key);
+      const attempt =
+        existing ??
+        (await this.prisma.collectionAttempt.create({
+          data: {
+            leadId,
+            actionType: CollectionActionType.ASK_GROUPED_DATAPOINTS,
+            entityType: card.entityType,
+            entityId: entity?.id,
+            product,
+            metadata: {
+              autoFlowCardId: card.cardId,
+              keys,
+              optionalKeys,
+            },
+          },
+        }));
+      return {
+        type: 'ASK_GROUPED_DATAPOINTS',
+        actionId: attempt.id,
+        cardId: card.cardId,
+        title: card.question,
+        question: card.question,
+        datapoints: card.groupedFields.map((field) => ({
+          key: field.key,
+          entityType: card.entityType,
+          ...(entity?.id ? { entityId: entity.id } : {}),
+          label: field.label,
+          optional: field.optional,
+          input: field.input,
+        })),
+      };
+    }
+
+    const key = card.datapointKeys[0];
+    const existing = await this.prisma.collectionAttempt.findFirst({
+      where: {
+        leadId,
+        actionType: CollectionActionType.ASK_DATAPOINT,
+        status: CollectionAttemptStatus.PROPOSED,
+        metadata: { path: ['autoFlowCardId'], equals: card.cardId },
+        ...(entity?.id ? { entityId: entity.id } : {}),
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    const attempt =
+      existing ??
+      (await this.prisma.collectionAttempt.create({
+        data: {
+          leadId,
+          actionType: CollectionActionType.ASK_DATAPOINT,
+          entityType: card.entityType,
+          entityId: entity?.id,
+          product,
+          metadata: { autoFlowCardId: card.cardId, key },
+        },
+      }));
+    return {
+      type: 'ASK_DATAPOINT',
+      actionId: attempt.id,
+      datapoint: {
+        key,
+        entityType: card.entityType,
+        ...(entity?.id ? { entityId: entity.id } : {}),
+        ...(entity?.entityType === EntityType.VEHICLE && entity.ordinal > 1
+          ? { entityLabel: `Véhicule ${entity.ordinal}` }
+          : {}),
+        label: card.question,
+        question: card.question,
+      },
+      input: card.input ?? { type: 'TEXT' },
+    };
+  }
+
   private async assignmentAction(
     leadId: string,
     product: SelectedProduct,
@@ -786,9 +1090,15 @@ export class CollectionStrategyService {
       this.prisma.datapointValue.findMany({
         where: {
           customerFolderId: folder.id,
-          entityType: EntityType.DRIVER,
           definition: {
-            key: { in: ['driver.first_name', 'driver.last_name'] },
+            key: {
+              in: [
+                'driver.first_name',
+                'driver.last_name',
+                'customer.first_name',
+                'customer.last_name',
+              ],
+            },
           },
         },
         include: { definition: { select: { key: true } } },
@@ -801,7 +1111,10 @@ export class CollectionStrategyService {
       .filter((entity) => entity.entityType === EntityType.DRIVER)
       .sort((left, right) => left.ordinal - right.ordinal);
     if (!vehicles.length || !drivers.length) return undefined;
-    const driverOptions = this.driverOptions(drivers, values);
+    const driverOptions =
+      product === Product.AUTO
+        ? this.canonicalDriverOptions(drivers)
+        : this.driverOptions(drivers, values);
 
     const primaryByVehicle = new Map(
       relationRows
@@ -825,7 +1138,7 @@ export class CollectionStrategyService {
         });
       }
     }
-
+    if (product === Product.AUTO) return undefined;
     for (const vehicle of vehicles) {
       const primary = relationRows.find(
         (relation) =>
@@ -1115,16 +1428,32 @@ export class CollectionStrategyService {
     }>,
   ): DriverOption[] {
     return drivers.map((driver) => {
-      const first = values.find(
-        (value) =>
-          value.entityId === driver.id &&
-          value.definition.key === 'driver.first_name',
-      )?.value;
-      const last = values.find(
-        (value) =>
-          value.entityId === driver.id &&
-          value.definition.key === 'driver.last_name',
-      )?.value;
+      const first =
+        values.find(
+          (value) =>
+            value.entityId === driver.id &&
+            value.definition.key === 'driver.first_name',
+        )?.value ??
+        (driver.ordinal === 1
+          ? values.find(
+              (value) =>
+                value.entityId === null &&
+                value.definition.key === 'customer.first_name',
+            )?.value
+          : undefined);
+      const last =
+        values.find(
+          (value) =>
+            value.entityId === driver.id &&
+            value.definition.key === 'driver.last_name',
+        )?.value ??
+        (driver.ordinal === 1
+          ? values.find(
+              (value) =>
+                value.entityId === null &&
+                value.definition.key === 'customer.last_name',
+            )?.value
+          : undefined);
       const label = [first, last]
         .filter((part) => typeof part === 'string' && part.trim())
         .join(' ');
@@ -1135,12 +1464,22 @@ export class CollectionStrategyService {
     });
   }
 
+  private canonicalDriverOptions(drivers: DossierEntity[]): DriverOption[] {
+    return drivers.map((driver) => ({
+      entityId: driver.id,
+      label:
+        driver.ordinal === 1
+          ? 'Conducteur principal'
+          : 'Conducteur additionnel',
+    }));
+  }
+
   private loopQuestion(loop: CollectionLoop) {
     if (loop.entityType === EntityType.DRIVER) {
       return 'Do you want to add another driver?';
     }
     if (loop.entityType === EntityType.VEHICLE) {
-      return 'Voulez-vous ajouter un autre véhicule ?';
+      return 'Avez-vous un deuxième véhicule à assurer ?';
     }
     return 'Do you want to add another claim?';
   }

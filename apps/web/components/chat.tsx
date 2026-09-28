@@ -16,6 +16,7 @@ import {
   display,
   entityContextFromAction,
   isForbiddenApiError,
+  isRemovedAutoChatter,
   type ChatMessage,
 } from '@/lib/chat-helpers';
 import { Transcript } from '@/components/chat/transcript';
@@ -29,15 +30,58 @@ export { NextActionRenderer } from '@/components/chat/next-action-renderer';
 const WELCOME: ChatMessage = {
   id: 'welcome',
   role: 'NOVA',
-  content: 'Hi! Tell me what you need help with, in your own words.',
+  content: '',
 };
+
+function cleanMessages(messages: ChatMessage[]) {
+  return messages.filter((message) => !isRemovedAutoChatter(message.content));
+}
+
+function isAutoResponse(
+  response:
+    | InteractionResponse
+    | { selectedProduct: SelectableProduct; nextAction: NextAction }
+    | { nextAction: NextAction; completeness?: CompletenessResponse },
+) {
+  if ('selectedProduct' in response) return response.selectedProduct === 'AUTO';
+  if ('completeness' in response) return response.completeness?.product === 'AUTO';
+  return false;
+}
+
+function appendAssistantAction(
+  current: ChatMessage[],
+  response:
+    | InteractionResponse
+    | { selectedProduct: SelectableProduct; nextAction: NextAction }
+    | { nextAction: NextAction; completeness?: CompletenessResponse },
+  content = '',
+) {
+  const base = isAutoResponse(response) ? cleanMessages(current) : current;
+  return [
+    ...base,
+    {
+      id: crypto.randomUUID(),
+      role: 'NOVA' as const,
+      content,
+      action: response.nextAction,
+    },
+  ];
+}
+
+function actionDatapointKey(action: NextAction) {
+  if (action.type === 'ASK_DATAPOINT') return action.datapoint.key;
+  if (action.type === 'ASK_GROUPED_DATAPOINTS')
+    return action.datapoints.map((datapoint) => datapoint.key).join(',');
+  return undefined;
+}
 
 export default function ChatShell() {
   const [leadId, setLeadId] = useState<string>();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [action, setAction] = useState<NextAction>();
   const [completeness, setCompleteness] = useState(0);
-  const [completenessDetail, setCompletenessDetail] = useState<CompletenessResponse>();
+  const [completenessDetail, setCompletenessDetail] =
+    useState<CompletenessResponse>();
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -53,11 +97,13 @@ export default function ChatShell() {
         try {
           const conversation = await api.conversation(id);
           setMessages(
-            conversation.messages.map((m) => ({
-              id: m.id,
-              role: m.role === 'CUSTOMER' ? 'CUSTOMER' : 'NOVA',
-              content: m.content,
-            })),
+            cleanMessages(
+              conversation.messages.map((m) => ({
+                id: m.id,
+                role: m.role === 'CUSTOMER' ? 'CUSTOMER' : 'NOVA',
+                content: m.content,
+              })),
+            ),
           );
         } catch {
           window.localStorage.removeItem(SESSION_KEY);
@@ -109,7 +155,7 @@ export default function ChatShell() {
               ]
             : current
           : [
-              WELCOME,
+              ...(WELCOME.content ? [WELCOME] : []),
               ...(restoredAction
                 ? [
                     {
@@ -154,7 +200,7 @@ export default function ChatShell() {
       setCompletenessDetail(undefined);
       setInput('');
       setAnalyzing(false);
-      setMessages([WELCOME]);
+      setMessages(WELCOME.content ? [WELCOME] : []);
     } catch (cause) {
       setError(
         cause instanceof Error
@@ -253,15 +299,13 @@ export default function ChatShell() {
       setCompleteness(response.completeness.completeness);
       setCompletenessDetail(response.completeness);
       setAction(response.nextAction);
-      setMessages((current) => [
-        ...current,
-        {
-          id: crypto.randomUUID(),
-          role: 'NOVA',
-          content: assistantInteractionReply(response),
-          action: response.nextAction,
-        },
-      ]);
+      setMessages((current) =>
+        appendAssistantAction(
+          current,
+          response,
+          assistantInteractionReply(response),
+        ),
+      );
     } catch (cause) {
       setError(
         cause instanceof Error
@@ -291,21 +335,19 @@ export default function ChatShell() {
       const response =
         action.type === 'SELECT_PRODUCT'
           ? await api.selectProduct(leadId, value as SelectableProduct)
-          : await api.answer(leadId, action.actionId, value, message);
+          : await api.answer(
+              leadId,
+              action.actionId,
+              value,
+              message,
+              actionDatapointKey(action),
+            );
       if ('completeness' in response) {
         setCompleteness(response.completeness.completeness);
         setCompletenessDetail(response.completeness);
       }
       setAction(response.nextAction);
-      setMessages((current) => [
-        ...current,
-        {
-          id: crypto.randomUUID(),
-          role: 'NOVA',
-          content: 'Thanks — NOVA updated your dossier.',
-          action: response.nextAction,
-        },
-      ]);
+      setMessages((current) => appendAssistantAction(current, response));
     } catch (cause) {
       setError(
         cause instanceof Error

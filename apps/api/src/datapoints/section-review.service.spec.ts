@@ -119,7 +119,7 @@ describe('SectionReviewService', () => {
   it('assigns every current catalog definition category exactly once', async () => {
     const { service } = setup();
     const audit = await service.assignmentAudit();
-    expect(audit.assignedExactlyOnce).toBe(140);
+    expect(audit.assignedExactlyOnce).toBe(164);
     expect(audit.unassigned).toHaveLength(0);
     expect(audit.duplicateAssignments).toHaveLength(0);
   });

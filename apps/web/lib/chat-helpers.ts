@@ -1,7 +1,4 @@
-import type {
-  IntelligenceInput,
-  NextAction,
-} from '@nova/shared-types';
+import type { IntelligenceInput, NextAction } from '@nova/shared-types';
 import { ApiError, type InteractionResponse } from './api';
 
 export function display(value: unknown) {
@@ -54,6 +51,7 @@ export function formatCandidateValue(value: unknown) {
 }
 
 function extractedSummary(response: InteractionResponse) {
+  if (response.completeness.product === 'AUTO') return undefined;
   const candidates = response.intelligence.candidateDatapoints;
   if (!candidates.length || response.metrics.acceptedCandidateDatapoints < 1)
     return undefined;
@@ -70,21 +68,32 @@ function extractedSummary(response: InteractionResponse) {
   const used = new Set<string>();
   const parts: string[] = [];
   if (vehicle) {
-    parts.push(vehicle.toLowerCase().includes('vehicle') ? vehicle : 'a ' + vehicle);
+    parts.push(
+      vehicle.toLowerCase().includes('vehicle') ? vehicle : 'a ' + vehicle,
+    );
     used.add('vehicle.year');
     used.add('vehicle.make');
     used.add('vehicle.model');
   }
   for (const candidate of candidates) {
     if (used.has(candidate.key)) continue;
-    parts.push(display(candidate.key) + ': ' + formatCandidateValue(candidate.value));
+    parts.push(
+      display(candidate.key) + ': ' + formatCandidateValue(candidate.value),
+    );
     if (parts.length >= 5) break;
   }
   if (!parts.length) return undefined;
-  return 'So I have ' + parts.join(', ') + '. If anything is wrong, tell me and I’ll correct it.';
+  return (
+    'So I have ' +
+    parts.join(', ') +
+    '. If anything is wrong, tell me and I’ll correct it.'
+  );
 }
 
 export function assistantInteractionReply(response: InteractionResponse) {
+  if (response.completeness.product === 'AUTO') {
+    return '';
+  }
   const summary = extractedSummary(response);
   if (summary) return summary;
   if (response.metrics.acceptedCandidateDatapoints > 1)
@@ -92,7 +101,7 @@ export function assistantInteractionReply(response: InteractionResponse) {
   if (response.metrics.acceptedCandidateDatapoints === 1)
     return 'Thanks — I captured one detail from that. If it is wrong, tell me and I’ll correct it.';
   if (response.intelligence.intent.type === 'GENERAL_INQUIRY')
-    return "Hi — I’m here. Tell me what you want to insure, or choose one of the options below.";
+    return 'Hi — I’m here. Tell me what you want to insure, or choose one of the options below.';
   return 'Thanks — I have noted that.';
 }
 
@@ -111,6 +120,18 @@ export type ChatMessage = {
   content?: string;
   action?: NextAction;
 };
+
+const REMOVED_AUTO_CHATTER = new Set([
+  'Hi! Tell me what you need help with, in your own words.',
+  'Information enregistrée.',
+  'D’accord.',
+  'Thanks — NOVA updated your dossier.',
+]);
+
+export function isRemovedAutoChatter(content: string | undefined) {
+  if (!content) return false;
+  return REMOVED_AUTO_CHATTER.has(content.trim());
+}
 
 export function conversationStage(
   messages: ChatMessage[],

@@ -179,42 +179,22 @@ async function answer(
 }
 
 describe('IntakeOrchestratorService', () => {
-  it('runs AUTO insured NO directly to core collection and never asks HOME', async () => {
+  it('runs strict AUTO directly to core collection and never asks pre-core insurance questions', async () => {
     const { service, lead } = setup();
     const selected = await service.selectProduct(leadId, Product.AUTO);
-    expect(selected.nextAction).toMatchObject({
-      type: 'ASK_CURRENT_INSURANCE',
-      productDomain: 'AUTO',
-    });
-    const next = await answer(service, selected.nextAction, false);
-    expect(next.nextAction.type).toBe('ASK_DATAPOINT');
+    expect(selected.nextAction.type).toBe('ASK_DATAPOINT');
     expect(lead).toMatchObject({
       intakePhase: IntakePhase.CORE_DATA_COLLECTION,
-      currentAutoInsured: false,
+      currentAutoInsured: null,
       currentHomeInsured: null,
     });
   });
 
-  it('runs AUTO insured YES through AUTO policy before core collection', async () => {
+  it('does not ask AUTO policy availability in strict AUTO flow', async () => {
     const { service, lead } = setup();
     const selected = await service.selectProduct(leadId, Product.AUTO);
-    const policy = await answer(service, selected.nextAction, true);
-    expect(policy.nextAction).toMatchObject({
-      type: 'ASK_POLICY_DOCUMENT',
-      productDomain: 'AUTO',
-    });
-    const next = await answer(service, policy.nextAction, false);
-    expect(next.nextAction.type).toBe('ASK_DATAPOINT');
-    expect(lead.currentAutoPolicyAvailable).toBe(false);
-  });
-
-  it('runs AUTO policy YES deterministically without a required document action', async () => {
-    const { service, lead } = setup();
-    const selected = await service.selectProduct(leadId, Product.AUTO);
-    const policy = await answer(service, selected.nextAction, true);
-    const next = await answer(service, policy.nextAction, true);
-    expect(next.nextAction.type).toBe('ASK_DATAPOINT');
-    expect(lead.currentAutoPolicyAvailable).toBe(true);
+    expect(selected.nextAction.type).toBe('ASK_DATAPOINT');
+    expect(lead.currentAutoPolicyAvailable).toBe(null);
   });
 
   it('runs HOME insured NO directly to core collection and never asks AUTO', async () => {
@@ -314,18 +294,18 @@ describe('IntakeOrchestratorService', () => {
 
   it('treats repeated identical intake answers as idempotent', async () => {
     const { service, attempts, lead } = setup();
-    const selected = await service.selectProduct(leadId, Product.AUTO);
+    const selected = await service.selectProduct(leadId, Product.HOME);
     const first = await answer(service, selected.nextAction, false);
     const second = await answer(service, selected.nextAction, false);
     expect(first.nextAction.type).toBe(second.nextAction.type);
-    expect(lead.currentAutoInsured).toBe(false);
+    expect(lead.currentHomeInsured).toBe(false);
     expect(attempts).toHaveLength(1);
   });
 
   it('rejects wrong-domain and stale intake actions', async () => {
     const { service, attempts } = setup();
-    const selected = await service.selectProduct(leadId, Product.AUTO);
-    attempts[0].metadata.productDomain = 'HOME';
+    const selected = await service.selectProduct(leadId, Product.HOME);
+    attempts[0].metadata.productDomain = 'AUTO';
     await expect(answer(service, selected.nextAction, true)).rejects.toThrow(
       BadRequestException,
     );
@@ -362,14 +342,29 @@ describe('IntakeOrchestratorService', () => {
   it('persists COMPLETE when core collection returns COMPLETE and remains complete', async () => {
     const { service, lead } = setup({
       selectedProduct: Product.AUTO,
-      coreAction: { type: 'COMPLETE', actionId: 'complete-action' },
+      coreAction: {
+        type: 'COMPLETE',
+        actionId: 'complete-action',
+        message:
+          'Parfait, merci beaucoup pour votre temps et pour les informations.',
+      },
     });
     lead.currentAutoInsured = false;
     const complete = await service.currentAction(leadId);
     expect(complete.type).toBe('COMPLETE');
+    if (complete.type === 'COMPLETE') {
+      expect(complete.message).toBe(
+        'Parfait, merci beaucoup pour votre temps et pour les informations.',
+      );
+    }
     expect(lead.intakePhase).toBe(IntakePhase.COMPLETE);
     const again = await service.currentAction(leadId);
     expect(again.type).toBe('COMPLETE');
+    if (again.type === 'COMPLETE') {
+      expect(again.message).toBe(
+        'Parfait, merci beaucoup pour votre temps et pour les informations.',
+      );
+    }
     expect(lead.intakePhase).toBe(IntakePhase.COMPLETE);
   });
 });

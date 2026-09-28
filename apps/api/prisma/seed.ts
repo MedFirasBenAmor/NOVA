@@ -361,11 +361,7 @@ const common: Definition[] = [
       possibleSources: commonSources,
       preferredCollectionMethods: commonMethods,
       validationRules: {
-        allowedValues: [
-          'OTHER_SITUATION',
-          'TENANT_OCCUPANT',
-          'OWNER_OCCUPANT',
-        ],
+        allowedValues: ['OTHER_SITUATION', 'TENANT_OCCUPANT', 'OWNER_OCCUPANT'],
         labels: {
           OTHER_SITUATION: 'Autre situation',
           TENANT_OCCUPANT: 'Locataire occupant',
@@ -822,6 +818,35 @@ const auto: Definition[] = [
     },
   ),
   definition(
+    'auto.current_insurer_tenure_band',
+    'Current insurer tenure band',
+    'The lossless tenure band selected by the customer for the current auto insurer.',
+    {
+      product: Product.AUTO,
+      category: 'CURRENT_AUTO_INSURANCE',
+      entityType: EntityType.CUSTOMER,
+      dataType: DataType.ENUM,
+      requirementType: RequirementType.OPTIONAL,
+      possibleSources: autoSources,
+      preferredCollectionMethods: autoMethods,
+      manuallyAskable: true,
+      validationRules: {
+        allowedValues: [
+          'LESS_THAN_1_YEAR',
+          'YEARS_1_TO_3',
+          'YEARS_3_TO_5',
+          'YEARS_5_PLUS',
+        ],
+        labels: {
+          LESS_THAN_1_YEAR: 'Moins de 1 an',
+          YEARS_1_TO_3: '1 à 3 ans',
+          YEARS_3_TO_5: '3 à 5 ans',
+          YEARS_5_PLUS: '5 ans et plus',
+        },
+      },
+    },
+  ),
+  definition(
     'auto.interruption_for_non_payment',
     'Interruption for non-payment',
     'Whether auto insurance was interrupted for non-payment.',
@@ -1151,7 +1176,11 @@ const autoR1: Definition[] = [
     requiredWhen: {
       key: 'request.type',
       operator: 'IN',
-      value: ['RENEWAL', 'BUNDLE_POLICIES', 'MIXED_NEW_ACQUISITION_AND_RENEWAL'],
+      value: [
+        'RENEWAL',
+        'BUNDLE_POLICIES',
+        'MIXED_NEW_ACQUISITION_AND_RENEWAL',
+      ],
     },
   }),
   compactDefinition({
@@ -1167,7 +1196,11 @@ const autoR1: Definition[] = [
     requiredWhen: {
       key: 'request.type',
       operator: 'IN',
-      value: ['RENEWAL', 'BUNDLE_POLICIES', 'MIXED_NEW_ACQUISITION_AND_RENEWAL'],
+      value: [
+        'RENEWAL',
+        'BUNDLE_POLICIES',
+        'MIXED_NEW_ACQUISITION_AND_RENEWAL',
+      ],
     },
   }),
   compactDefinition({
@@ -1180,6 +1213,291 @@ const autoR1: Definition[] = [
     // Retained for compatibility only. The multi-vehicle loop is Phase 2, so
     // the question is not asked and creates no second vehicle for now.
     requirementType: RequirementType.OPTIONAL,
+  }),
+];
+
+const autoStrictPdfFlow: Definition[] = [
+  compactDefinition({
+    key: 'customer.address.civic_number',
+    label: 'Numéro civique',
+    product: Product.COMMON,
+    category: 'CUSTOMER_ADDRESS',
+    entityType: EntityType.CUSTOMER,
+    dataType: DataType.STRING,
+    requirementType: RequirementType.OPTIONAL,
+    manuallyAskable: true,
+  }),
+  compactDefinition({
+    key: 'customer.address.apartment',
+    label: 'Appartement (optionnel)',
+    product: Product.COMMON,
+    category: 'CUSTOMER_ADDRESS',
+    entityType: EntityType.CUSTOMER,
+    dataType: DataType.STRING,
+    requirementType: RequirementType.OPTIONAL,
+  }),
+  compactDefinition({
+    key: 'request.desired_coverage_date',
+    label: 'Date début assurance',
+    product: Product.COMMON,
+    category: 'REQUEST',
+    entityType: EntityType.REQUEST,
+    dataType: DataType.DATE,
+    requirementType: RequirementType.OPTIONAL,
+    manuallyAskable: true,
+  }),
+  compactDefinition({
+    key: 'customer.marital_status',
+    label: 'État civil',
+    product: Product.COMMON,
+    category: 'CUSTOMER',
+    entityType: EntityType.CUSTOMER,
+    dataType: DataType.ENUM,
+    requirementType: RequirementType.REQUIRED,
+    validationRules: {
+      allowedValues: [
+        'Célibataire',
+        'Marié',
+        'Conjoint de fait',
+        'Divorcé',
+        'Séparé',
+        'Veuf / Veuve',
+      ],
+    },
+  }),
+  compactDefinition({
+    key: 'vehicle.vin_available',
+    label: 'NIV disponible',
+    product: Product.AUTO,
+    category: 'VEHICLE_IDENTIFICATION',
+    entityType: EntityType.VEHICLE,
+    dataType: DataType.BOOLEAN,
+    requirementType: RequirementType.OPTIONAL,
+    manuallyAskable: true,
+  }),
+  compactDefinition({
+    key: 'vehicle.acquisition_condition',
+    label: 'État véhicule',
+    product: Product.AUTO,
+    category: 'VEHICLE_ACQUISITION',
+    entityType: EntityType.VEHICLE,
+    dataType: DataType.ENUM,
+    requirementType: RequirementType.REQUIRED,
+    validationRules: { allowedValues: ['Neuf', 'Usagé', 'Démonstrateur'] },
+  }),
+  compactDefinition({
+    key: 'vehicle.financing_status',
+    label: 'Statut',
+    product: Product.AUTO,
+    category: 'VEHICLE_ACQUISITION',
+    entityType: EntityType.VEHICLE,
+    dataType: DataType.ENUM,
+    requirementType: RequirementType.REQUIRED,
+    validationRules: { allowedValues: ['Financé', 'Loué', 'Payé'] },
+  }),
+  compactDefinition({
+    key: 'vehicle.financing_term_months',
+    label: 'Terme location',
+    product: Product.AUTO,
+    category: 'VEHICLE_ACQUISITION',
+    entityType: EntityType.VEHICLE,
+    dataType: DataType.ENUM,
+    requirementType: RequirementType.OPTIONAL,
+    manuallyAskable: true,
+    validationRules: {
+      allowedValues: ['24 mois', '36 mois', '48 mois', '60 mois'],
+    },
+  }),
+  compactDefinition({
+    key: 'vehicle.primary_use',
+    label: 'Usage principal',
+    product: Product.AUTO,
+    category: 'VEHICLE_USE',
+    entityType: EntityType.VEHICLE,
+    dataType: DataType.ENUM,
+    requirementType: RequirementType.REQUIRED,
+    validationRules: {
+      allowedValues: ['Promenade', 'Travail', 'École', 'Affaires'],
+    },
+  }),
+  compactDefinition({
+    key: 'vehicle.commercial_use_type',
+    label: 'Usage commercial',
+    product: Product.AUTO,
+    category: 'VEHICLE_USE',
+    entityType: EntityType.VEHICLE,
+    dataType: DataType.ENUM,
+    requirementType: RequirementType.OPTIONAL,
+    manuallyAskable: true,
+    validationRules: {
+      allowedValues: ['Non', 'Uber', 'Livraison', 'Turo', 'Autre'],
+    },
+  }),
+  compactDefinition({
+    key: 'vehicle.annual_mileage_band',
+    label: 'Kilométrage annuel',
+    product: Product.AUTO,
+    category: 'VEHICLE_USE',
+    entityType: EntityType.VEHICLE,
+    dataType: DataType.ENUM,
+    requirementType: RequirementType.OPTIONAL,
+    manuallyAskable: true,
+    validationRules: {
+      allowedValues: [
+        'Moins de 5 000 km',
+        '5 000 à 10 000 km',
+        '10 000 à 15 000 km',
+        '15 000 à 20 000 km',
+        '20 000 km +',
+      ],
+    },
+  }),
+  compactDefinition({
+    key: 'vehicle.used_outside_quebec',
+    label: 'Hors Québec',
+    product: Product.AUTO,
+    category: 'VEHICLE_USE',
+    entityType: EntityType.VEHICLE,
+    dataType: DataType.BOOLEAN,
+    requirementType: RequirementType.OPTIONAL,
+    manuallyAskable: true,
+  }),
+  compactDefinition({
+    key: 'driver.license_type',
+    label: 'Type permis',
+    product: Product.AUTO,
+    category: 'DRIVER',
+    entityType: EntityType.DRIVER,
+    dataType: DataType.ENUM,
+    requirementType: RequirementType.REQUIRED,
+    validationRules: {
+      allowedValues: [
+        'Permis Québec',
+        'Permis probatoire',
+        'Permis apprenti',
+        'Permis autre province',
+        'Permis international',
+      ],
+    },
+  }),
+  compactDefinition({
+    key: 'driver.driving_start_age_quebec',
+    label: 'Age de début de conduire au Québec',
+    product: Product.AUTO,
+    category: 'DRIVER',
+    entityType: EntityType.DRIVER,
+    dataType: DataType.NUMBER,
+    requirementType: RequirementType.OPTIONAL,
+    manuallyAskable: true,
+  }),
+  compactDefinition({
+    key: 'auto.insurance_interruption_last_6_months',
+    label: 'Interruption assurance automobile',
+    product: Product.AUTO,
+    category: 'CURRENT_AUTO_INSURANCE',
+    entityType: EntityType.CUSTOMER,
+    dataType: DataType.BOOLEAN,
+    requirementType: RequirementType.OPTIONAL,
+    manuallyAskable: true,
+  }),
+  compactDefinition({
+    key: 'claim.amount',
+    label: 'Montant sinistre',
+    product: Product.AUTO,
+    category: 'AUTO_CLAIMS',
+    entityType: EntityType.CLAIM,
+    dataType: DataType.NUMBER,
+    requirementType: RequirementType.OPTIONAL,
+    manuallyAskable: true,
+  }),
+  compactDefinition({
+    key: 'claim.responsibility',
+    label: 'Responsabilité',
+    product: Product.AUTO,
+    category: 'AUTO_CLAIMS',
+    entityType: EntityType.CLAIM,
+    dataType: DataType.ENUM,
+    requirementType: RequirementType.OPTIONAL,
+    manuallyAskable: true,
+    validationRules: {
+      allowedValues: ['Responsable', 'Non responsable', 'Partagée'],
+    },
+  }),
+  compactDefinition({
+    key: 'vehicle.requested_coverages',
+    label: 'Protections',
+    product: Product.AUTO,
+    category: 'AUTO_COVERAGE',
+    entityType: EntityType.VEHICLE,
+    dataType: DataType.OBJECT,
+    requirementType: RequirementType.OPTIONAL,
+    manuallyAskable: true,
+    validationRules: {
+      supportedCodes: [
+        'Responsabilité civile : 2M$ / 1M$',
+        'Collision',
+        'Accident sans collision',
+        'Tous risques',
+        'Assistance routière',
+      ],
+    },
+  }),
+  compactDefinition({
+    key: 'vehicle.replacement_coverage',
+    label: 'Valeur à neuf',
+    product: Product.AUTO,
+    category: 'AUTO_COVERAGE',
+    entityType: EntityType.VEHICLE,
+    dataType: DataType.ENUM,
+    requirementType: RequirementType.OPTIONAL,
+    manuallyAskable: true,
+    validationRules: {
+      allowedValues: [
+        'Valeur a neuf FAQ 43',
+        'Assurance remplacement FPQ5',
+        'Aucune',
+      ],
+    },
+  }),
+  compactDefinition({
+    key: 'consent.credit_and_claims_check',
+    label: 'Vérification de crédit et dossier de sinistres',
+    product: Product.COMMON,
+    category: 'CONSENT',
+    entityType: EntityType.CUSTOMER,
+    dataType: DataType.BOOLEAN,
+    requirementType: RequirementType.OPTIONAL,
+    manuallyAskable: true,
+  }),
+  compactDefinition({
+    key: 'consent.data_use_quote_preparation',
+    label: 'Utilisation des renseignements',
+    product: Product.COMMON,
+    category: 'CONSENT',
+    entityType: EntityType.CUSTOMER,
+    dataType: DataType.BOOLEAN,
+    requirementType: RequirementType.OPTIONAL,
+    manuallyAskable: true,
+  }),
+  compactDefinition({
+    key: 'consent.privacy_collection_use',
+    label: 'Protection des renseignements personnels',
+    product: Product.COMMON,
+    category: 'CONSENT',
+    entityType: EntityType.CUSTOMER,
+    dataType: DataType.BOOLEAN,
+    requirementType: RequirementType.OPTIONAL,
+    manuallyAskable: true,
+  }),
+  compactDefinition({
+    key: 'consent.communication',
+    label: 'Communication',
+    product: Product.COMMON,
+    category: 'CONSENT',
+    entityType: EntityType.CUSTOMER,
+    dataType: DataType.BOOLEAN,
+    requirementType: RequirementType.OPTIONAL,
+    manuallyAskable: true,
   }),
 ];
 
@@ -1973,7 +2291,13 @@ const home: Definition[] = [
 ].map(compactDefinition);
 
 async function main() {
-  for (const item of [...common, ...auto, ...autoR1, ...home]) {
+  for (const item of [
+    ...common,
+    ...auto,
+    ...autoR1,
+    ...autoStrictPdfFlow,
+    ...home,
+  ]) {
     const { key, version, ...data } = item;
     await prisma.datapointDefinition.upsert({
       where: { key_version: { key, version } },
@@ -1982,7 +2306,7 @@ async function main() {
     });
   }
   console.log(
-    `Seeded ${common.length} COMMON, ${auto.length + autoR1.length} AUTO, and ${home.length} HOME datapoint definitions.`,
+    `Seeded ${common.length} COMMON, ${auto.length + autoR1.length + autoStrictPdfFlow.length} AUTO, and ${home.length} HOME datapoint definitions.`,
   );
 }
 

@@ -108,7 +108,7 @@ export class IntakeOrchestratorService {
         where: { id: leadId },
         data: { intakePhase: IntakePhase.COMPLETE },
       });
-      return { type: 'COMPLETE', actionId: nextAction.actionId };
+      return nextAction;
     }
     return nextAction;
   }
@@ -236,6 +236,7 @@ export class IntakeOrchestratorService {
   ): ExpectedIntakeAction | undefined {
     const product = lead.selectedProduct;
     if (!product || !this.profiles.isSelectable(product)) return undefined;
+    if (product === Product.AUTO) return undefined;
 
     if (this.requiresDomain(product, 'AUTO')) {
       if (lead.currentAutoInsured === null)
@@ -289,6 +290,7 @@ export class IntakeOrchestratorService {
   ): Promise<NextAction | undefined> {
     if (
       !lead.selectedProduct ||
+      lead.selectedProduct === Product.AUTO ||
       !this.requiresDomain(lead.selectedProduct, 'AUTO') ||
       lead.currentAutoInsured !== true ||
       lead.currentAutoPolicyAvailable !== true

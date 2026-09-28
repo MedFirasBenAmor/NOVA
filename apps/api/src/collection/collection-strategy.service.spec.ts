@@ -37,8 +37,15 @@ const definitions = [
   requirementType: RequirementType.REQUIRED,
 }));
 
+type TestAttempt = {
+  id?: string;
+  actionType?: CollectionActionType;
+  status?: CollectionAttemptStatus;
+  entityId?: string | null;
+};
+
 function setup(
-  attempts: object[] = [],
+  attempts: TestAttempt[] = [],
   catalog: object[] = definitions,
   reviews?: object,
   sequence?: QuestionSequenceService,
@@ -64,18 +71,13 @@ function setup(
         }),
       ),
       update: jest.fn().mockResolvedValue({}),
-      findFirst: jest.fn(({ where }) =>
+      findFirst: jest.fn(({ where }: { where?: TestAttempt }) =>
         Promise.resolve(
           attempts.find((attempt) => {
-            const item = attempt as {
-              id?: string;
-              actionType?: CollectionActionType;
-              status?: CollectionAttemptStatus;
-            };
-            if (where?.id && item.id !== where.id) return false;
-            if (where?.actionType && item.actionType !== where.actionType)
+            if (where?.id && attempt.id !== where.id) return false;
+            if (where?.actionType && attempt.actionType !== where.actionType)
               return false;
-            if (where?.status && item.status !== where.status) return false;
+            if (where?.status && attempt.status !== where.status) return false;
             return true;
           }),
         ),
@@ -265,11 +267,7 @@ describe('CollectionStrategyService', () => {
       status: CollectionAttemptStatus.PROPOSED,
       product: Product.AUTO,
       metadata: {
-        keys: [
-          'driver.first_name',
-          'driver.last_name',
-          'driver.date_of_birth',
-        ],
+        keys: ['driver.first_name', 'driver.last_name', 'driver.date_of_birth'],
       },
     };
     const { service, datapoints, prisma } = setup([attempt]);
@@ -290,12 +288,43 @@ describe('CollectionStrategyService', () => {
         collectionMethod: CollectionMethod.MANUAL_QUESTION,
       }),
     );
+    const completedStatusMatcher: unknown = expect.objectContaining({
+      status: CollectionAttemptStatus.COMPLETED,
+    });
     expect(prisma.collectionAttempt.update).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: attempt.id },
-        data: expect.objectContaining({
-          status: CollectionAttemptStatus.COMPLETED,
-        }),
+        data: completedStatusMatcher,
+      }),
+    );
+  });
+
+  it('persists canonical claim year choices as numbers for CARD 37', async () => {
+    const leadId = '00000000-0000-4000-8000-000000000002';
+    const attempt = {
+      id: 'claim-year-1',
+      leadId,
+      actionType: CollectionActionType.ASK_DATAPOINT,
+      entityType: EntityType.CLAIM,
+      entityId: '00000000-0000-4000-8000-000000000004',
+      status: CollectionAttemptStatus.PROPOSED,
+      product: Product.AUTO,
+      metadata: {
+        autoFlowCardId: 'CARD_37',
+        key: 'claim.year',
+      },
+    } as TestAttempt;
+    const { service, datapoints } = setup([attempt]);
+
+    await service.answer(leadId, attempt.id!, '2026', '2026');
+
+    expect(datapoints.upsert).toHaveBeenCalledWith(
+      leadId,
+      expect.objectContaining({
+        key: 'claim.year',
+        value: 2026,
+        entityType: EntityType.CLAIM,
+        entityId: attempt.entityId,
       }),
     );
   });
@@ -712,7 +741,9 @@ describe('CollectionStrategyService VEHICLE loop', () => {
     expect(result.type).toBe('ASK_ADD_ANOTHER_ENTITY');
     if (result.type === 'ASK_ADD_ANOTHER_ENTITY') {
       expect(result.entityType).toBe('VEHICLE');
-      expect(result.question).toBe('Voulez-vous ajouter un autre véhicule ?');
+      expect(result.question).toBe(
+        'Avez-vous un deuxième véhicule à assurer ?',
+      );
       expect(result.label).toBe('Véhicule 1');
       expect(result.ordinal).toBe(1);
     }
@@ -802,7 +833,9 @@ describe('CollectionStrategyService VEHICLE loop', () => {
     expect(result.type).toBe('ASK_ADD_ANOTHER_ENTITY');
     if (result.type === 'ASK_ADD_ANOTHER_ENTITY') {
       expect(result.entityType).toBe('VEHICLE');
-      expect(result.question).toBe('Voulez-vous ajouter un autre véhicule ?');
+      expect(result.question).toBe(
+        'Avez-vous un deuxième véhicule à assurer ?',
+      );
       expect(result.label).toBe('Véhicule 2');
       expect(result.ordinal).toBe(2);
     }
@@ -1009,7 +1042,7 @@ function assignmentSetup(opts: {
 }
 
 describe('CollectionStrategyService DRIVER to VEHICLE assignment', () => {
-  it('asks Vehicle 1 assignment first with dynamic driver names', async () => {
+  it('asks Vehicle 1 assignment first with canonical PDF driver labels', async () => {
     const { service } = assignmentSetup({
       vehicles: [
         { id: 'vehicle-1', ordinal: 1 },
@@ -1036,8 +1069,8 @@ describe('CollectionStrategyService DRIVER to VEHICLE assignment', () => {
         'Qui conduit principalement le véhicule 1 ?',
       );
       expect(result.options).toEqual([
-        { entityId: 'driver-a', label: 'Ahmed Ben Ali' },
-        { entityId: 'driver-b', label: 'Sarah Ben Ali' },
+        { entityId: 'driver-a', label: 'Conducteur principal' },
+        { entityId: 'driver-b', label: 'Conducteur additionnel' },
       ]);
     }
   });

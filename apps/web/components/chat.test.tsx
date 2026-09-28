@@ -26,7 +26,7 @@ describe('NextActionRenderer', () => {
       ],
       'Pleasure',
     ],
-    ['YES_NO', undefined, 'Yes'],
+    ['YES_NO', undefined, 'Oui'],
   ] as const)(
     'renders %s choices from backend metadata',
     (inputType, options, expected) => {
@@ -49,6 +49,25 @@ describe('NextActionRenderer', () => {
     },
   );
 
+  it('maps ASK_DATAPOINT Oui/Non labels to boolean values', () => {
+    const action: NextAction = {
+      type: 'ASK_DATAPOINT',
+      actionId: 'card-32',
+      datapoint: {
+        key: 'auto.insurance_interruption_last_6_months',
+        entityType: 'CUSTOMER',
+        label:
+          'Y a-t-il eu une interruption d’assurance automobile ? ( règle depuis 6 mois non assuré en auto = interruption d’assurance)',
+      },
+      input: { type: 'YES_NO' },
+    };
+    render(<NextActionRenderer action={action} {...handlers} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Oui' }));
+    expect(handlers.onAnswer).toHaveBeenLastCalledWith(true, 'Oui');
+    fireEvent.click(screen.getByRole('button', { name: 'Non' }));
+    expect(handlers.onAnswer).toHaveBeenLastCalledWith(false, 'Non');
+  });
+
   it('renders vehicle add-another actions with French labels and vehicle context', () => {
     const action: NextAction = {
       type: 'ASK_ADD_ANOTHER_ENTITY',
@@ -58,13 +77,13 @@ describe('NextActionRenderer', () => {
       loopId: 'loop-1',
       ordinal: 2,
       label: 'Véhicule 2',
-      question: 'Voulez-vous ajouter un autre véhicule ?',
+      question: 'Avez-vous un deuxième véhicule à assurer ?',
       input: { type: 'YES_NO' },
     };
     render(<NextActionRenderer action={action} {...handlers} />);
     expect(screen.getByText('Véhicule 2')).toBeInTheDocument();
     expect(
-      screen.getByText('Voulez-vous ajouter un autre véhicule ?'),
+      screen.getByText('Avez-vous un deuxième véhicule à assurer ?'),
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Oui' }));
     expect(handlers.onAnswer).toHaveBeenCalledWith(true, 'Oui');
@@ -86,7 +105,7 @@ describe('NextActionRenderer', () => {
     };
     render(<NextActionRenderer action={action} {...handlers} />);
     expect(screen.getByText('Véhicule 2')).toBeInTheDocument();
-    expect(screen.getByLabelText('VIN?')).toBeInTheDocument();
+    expect(screen.getByLabelText('VIN')).toBeInTheDocument();
   });
 
   it('renders driver assignment options and submits the selected principal driver', () => {
@@ -102,8 +121,8 @@ describe('NextActionRenderer', () => {
       vehicleLabel: 'Véhicule 1',
       question: 'Qui conduit principalement le véhicule 1 ?',
       options: [
-        { entityId: 'driver-a', label: 'Ahmed Ben Ali' },
-        { entityId: 'driver-b', label: 'Sarah Ben Ali' },
+        { entityId: 'driver-a', label: 'Conducteur principal' },
+        { entityId: 'driver-b', label: 'Conducteur additionnel' },
       ],
       input: { type: 'SINGLE_CHOICE' },
     };
@@ -112,8 +131,13 @@ describe('NextActionRenderer', () => {
     expect(
       screen.getByText('Qui conduit principalement le véhicule 1 ?'),
     ).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Sarah Ben Ali' }));
-    expect(handlers.onAnswer).toHaveBeenCalledWith('driver-b', 'Sarah Ben Ali');
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Conducteur additionnel' }),
+    );
+    expect(handlers.onAnswer).toHaveBeenCalledWith(
+      'driver-b',
+      'Conducteur additionnel',
+    );
   });
 
   it('renders resumed assignment at the first missing vehicle', () => {
@@ -128,7 +152,7 @@ describe('NextActionRenderer', () => {
       vehicleOrdinal: 2,
       vehicleLabel: 'Véhicule 2',
       question: 'Qui conduit principalement le véhicule 2 ?',
-      options: [{ entityId: 'driver-b', label: 'Sarah Ben Ali' }],
+      options: [{ entityId: 'driver-b', label: 'Conducteur additionnel' }],
       input: { type: 'SINGLE_CHOICE' },
     };
     render(<NextActionRenderer action={action} {...handlers} />);
@@ -510,7 +534,11 @@ describe('ChatShell', () => {
             missing: [],
             conditionalRequired: [],
           },
-          nextAction: { type: 'COMPLETE', actionId: 'done' },
+          nextAction: {
+            type: 'COMPLETE',
+            actionId: 'done',
+            message: 'Parfait, merci beaucoup pour votre temps et pour les informations.',
+          },
           metrics: { acceptedCandidateDatapoints: 4 },
         }),
       );
@@ -521,8 +549,11 @@ describe('ChatShell', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
     expect(await screen.findByText('I bought a RAV4')).toBeInTheDocument();
     expect(
-      await screen.findByText(/capture several details/),
+      await screen.findByText(
+        'Parfait, merci beaucoup pour votre temps et pour les informations.',
+      ),
     ).toBeInTheDocument();
+    expect(screen.queryByText('Information enregistrée.')).not.toBeInTheDocument();
     expect(screen.getByText('16%')).toBeInTheDocument();
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
@@ -543,12 +574,12 @@ describe('ChatShell', () => {
       type: 'ASK_DATAPOINT' as const,
       actionId: 'action-1',
       datapoint: {
-        key: 'claim.description',
+        key: 'claim.amount',
         entityType: 'CLAIM' as const,
         entityId: '00000000-0000-4000-8000-000000000123',
-        label: 'Claim description',
+        label: 'Montant du sinistre',
       },
-      input: { type: 'TEXT' as const },
+      input: { type: 'NUMBER' as const },
     };
     const fetchMock = vi
       .fn()
@@ -587,7 +618,11 @@ describe('ChatShell', () => {
             missing: [],
             conditionalRequired: [],
           },
-          nextAction: { type: 'COMPLETE', actionId: 'done' },
+          nextAction: {
+            type: 'COMPLETE',
+            actionId: 'done',
+            message: 'Parfait, merci beaucoup pour votre temps et pour les informations.',
+          },
           metrics: { acceptedCandidateDatapoints: 0 },
         }),
       );
@@ -596,21 +631,21 @@ describe('ChatShell', () => {
     const composer = await screen.findByLabelText('Message');
     fireEvent.change(composer, { target: { value: 'continue' } });
     fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
-    await screen.findByText('Claim description?');
-    fireEvent.change(composer, { target: { value: 'Small windshield claim' } });
+    await screen.findByText('Montant du sinistre');
+    fireEvent.change(composer, { target: { value: '1200' } });
     fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
-    await screen.findByText('Small windshield claim');
+    await screen.findByText('1200');
     expect(fetchMock).toHaveBeenNthCalledWith(
       3,
       expect.stringContaining('/interactions'),
       expect.objectContaining({
         body: JSON.stringify({
-          message: 'Small windshield claim',
+          message: '1200',
           entityContext: {
             claimId: '00000000-0000-4000-8000-000000000123',
             currentDatapoint: {
-              key: 'claim.description',
-              label: 'Claim description',
+              key: 'claim.amount',
+              label: 'Montant du sinistre',
               entityType: 'CLAIM',
               entityId: '00000000-0000-4000-8000-000000000123',
             },
@@ -620,7 +655,7 @@ describe('ChatShell', () => {
     );
   });
 
-  it('summarizes extracted vehicle facts and invites corrections', async () => {
+  it('does not insert generated English summaries into the AUTO canonical flow', async () => {
     const fetchMock = vi
       .fn()
       .mockImplementationOnce(() => response({ id: 'lead-1' }))
@@ -672,10 +707,10 @@ describe('ChatShell', () => {
       target: { value: 'I drive a 2024 Toyota RAV4' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
-    expect(
-      await screen.findByText(/So I have a 2024 Toyota Rav4/),
-    ).toBeInTheDocument();
-    expect(screen.getByText(/If anything is wrong/)).toBeInTheDocument();
+    await screen.findByText('16%');
+    expect(screen.queryByText('Information enregistrée.')).not.toBeInTheDocument();
+    expect(screen.queryByText(/So I have/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/If anything is wrong/)).not.toBeInTheDocument();
   });
 
   it('answers a greeting even when no dossier facts are extracted', async () => {
@@ -856,10 +891,13 @@ describe('ChatShell', () => {
     expect(await screen.findByText('Existing message')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /New folder/i }));
     expect(
-      await screen.findByText(
+      await screen.findByText('Comment voulez-vous commencer ?'),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(
         'Hi! Tell me what you need help with, in your own words.',
       ),
-    ).toBeInTheDocument();
+    ).not.toBeInTheDocument();
     expect(screen.queryByText('Existing message')).not.toBeInTheDocument();
     expect(localStorage.getItem('nova.leadId')).toBe('lead-new');
     expect(localStorage.getItem('nova.processingDocument')).toBeNull();

@@ -33,6 +33,14 @@ export type InputContract =
   | { type: 'YES_NO' }
   | { type: 'SINGLE_CHOICE'; options: ChoiceOption[] }
   | { type: 'MULTI_CHOICE'; options: ChoiceOption[] }
+  | {
+      type: 'DATE_CHOICE';
+      options: Array<
+        | { value: 'TODAY'; label: string }
+        | { value: 'FEW_DAYS'; label: string }
+        | { value: 'SPECIFIC'; label: string }
+      >;
+    }
   | { type: 'TEXT' }
   | { type: 'NUMBER' }
   | { type: 'DATE' }
@@ -178,6 +186,7 @@ export type NextAction =
         entityId?: string;
         entityLabel?: string;
         label?: string;
+        question?: string;
         description?: string;
       };
       input: InputContract;
@@ -186,11 +195,14 @@ export type NextAction =
       type: 'ASK_GROUPED_DATAPOINTS';
       actionId: string;
       title?: string;
+      question?: string;
+      cardId?: string;
       datapoints: Array<{
         key: string;
         entityType: IntelligenceEntityType;
         entityId?: string;
         label?: string;
+        optional?: boolean;
         input?: InputContract;
       }>;
     }
@@ -270,4 +282,4 @@ export type NextAction =
       snapshotHash: string;
       groups: ReviewSectionGroup[];
     }
-  | { type: 'COMPLETE'; actionId: string };
+  | { type: 'COMPLETE'; actionId: string; message?: string };

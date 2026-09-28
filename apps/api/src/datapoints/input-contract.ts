@@ -16,6 +16,7 @@ export type ContractClassification =
   | 'YES_NO'
   | 'SINGLE_CHOICE'
   | 'MULTI_CHOICE'
+  | 'DATE_CHOICE'
   | 'TEXT'
   | 'NUMBER'
   | 'DATE'

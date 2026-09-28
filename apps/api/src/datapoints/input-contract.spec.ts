@@ -20,15 +20,15 @@ describe('InputContractBuilder', () => {
     const finiteEnums = count(/allowedValues:/g);
     const object = count(/dataType: DataType\.OBJECT/g);
 
-    expect(total).toBe(140);
-    expect(boolean).toBe(37);
-    expect(text).toBe(46);
-    expect(number).toBe(25);
-    expect(date).toBe(10);
-    expect(enums).toBe(18);
-    expect(finiteEnums).toBe(18);
-    expect(object).toBe(4);
-    expect(enums - finiteEnums + object).toBe(4);
+    expect(total).toBe(164);
+    expect(boolean).toBe(44);
+    expect(text).toBe(48);
+    expect(number).toBe(27);
+    expect(date).toBe(11);
+    expect(enums).toBe(29);
+    expect(finiteEnums).toBe(29);
+    expect(object).toBe(5);
+    expect(enums - finiteEnums + object).toBe(5);
   });
 
   it('builds deterministic contracts for every supported datatype', () => {
