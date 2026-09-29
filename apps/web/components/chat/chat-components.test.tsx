@@ -20,6 +20,15 @@ describe('ProgressStepper', () => {
       'aria-current',
     );
   });
+
+  it('renders compact mobile labels without removing desktop labels', () => {
+    render(<ProgressStepper activeStep={1} />);
+    expect(screen.getByText('Situation')).toBeInTheDocument();
+    expect(screen.getByText('Analyse')).toBeInTheDocument();
+    expect(screen.getAllByText('Recommandation')).toHaveLength(2);
+    expect(screen.getByText('Décrivez votre situation')).toBeInTheDocument();
+    expect(screen.getByText('Analyse & options')).toBeInTheDocument();
+  });
 });
 
 describe('AnalysisProgressCard', () => {

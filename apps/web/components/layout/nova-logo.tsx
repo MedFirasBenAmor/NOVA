@@ -12,7 +12,7 @@ export function NovaLogo({ className, withWordmark = true, tone = 'navy' }: Nova
       <svg
         viewBox="0 0 40 40"
         aria-hidden="true"
-        className="size-9 shrink-0"
+        className="size-8 shrink-0 md:size-9"
         fill="none"
       >
         <rect width="40" height="40" rx="12" fill="#071552" />
@@ -29,7 +29,7 @@ export function NovaLogo({ className, withWordmark = true, tone = 'navy' }: Nova
       {withWordmark && (
         <span
           className={cn(
-            'text-lg font-bold tracking-tight',
+            'text-base font-bold tracking-tight md:text-lg',
             tone === 'white' ? 'text-white' : 'text-nova-navy',
           )}
         >

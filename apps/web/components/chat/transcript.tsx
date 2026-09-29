@@ -91,7 +91,7 @@ export function Transcript({
       ref={scrollContainerRef}
       data-testid="conversation-scroll"
       onScroll={updateNearBottom}
-      className="nova-scroll flex-1 space-y-3 overflow-y-auto px-4 py-4 sm:px-6"
+      className="nova-scroll min-h-0 flex-1 content-start space-y-3 overflow-y-auto px-3 py-3 sm:px-4 md:px-6 md:py-4"
     >
       {messages.map((message) => {
         const isCustomer = message.role === 'CUSTOMER';

@@ -21,13 +21,13 @@ export function NovaHeader({ backHref, showBadge = true, className, children }: 
         className,
       )}
     >
-      <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between gap-3 px-4 sm:px-6">
+      <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between gap-2 px-3 sm:px-4 md:h-16 md:gap-3 md:px-6">
         <div className="flex min-w-0 items-center gap-2">
           {backHref && (
             <Link
               href={backHref}
               aria-label="Retour"
-              className="grid size-10 shrink-0 place-items-center rounded-xl text-nova-navy transition-colors hover:bg-nova-surface-secondary"
+              className="grid size-9 shrink-0 place-items-center rounded-xl text-nova-navy transition-colors hover:bg-nova-surface-secondary md:size-10"
             >
               <ArrowLeft className="size-5" aria-hidden="true" />
             </Link>

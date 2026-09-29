@@ -449,7 +449,7 @@ export default function ChatShell() {
   if (loading)
     return (
       <main
-        className="grid min-h-[calc(100dvh-4rem)] place-items-center"
+        className="grid min-h-[calc(100dvh-3.5rem)] place-items-center md:min-h-[calc(100dvh-4rem)]"
         role="status"
         aria-busy="true"
       >
@@ -467,16 +467,16 @@ export default function ChatShell() {
       : 'Assurance';
 
   return (
-    <main className="mx-auto w-full max-w-6xl px-0 py-0 sm:px-6 sm:py-8">
-      <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start lg:gap-6">
-        <section className="flex h-[calc(100dvh-4rem)] min-h-0 flex-col overflow-hidden bg-white lg:h-[calc(100dvh-8rem)] lg:min-h-[640px] lg:rounded-[20px] lg:border lg:border-nova-border lg:shadow-token">
-          <header className="shrink-0 border-b border-nova-border px-4 py-4 sm:px-6">
+    <main className="mx-auto h-[calc(100dvh_-_3.5rem_-_4.75rem_-_env(safe-area-inset-bottom))] w-full max-w-6xl overflow-hidden px-0 py-0 md:h-auto md:px-6 md:py-8">
+      <div className="h-full min-h-0 lg:grid lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start lg:gap-6">
+        <section className="flex h-full min-h-0 flex-col overflow-hidden bg-white md:h-[calc(100dvh-8rem)] md:min-h-[640px] md:rounded-[20px] md:border md:border-nova-border md:shadow-token lg:h-[calc(100dvh-8rem)]">
+          <header className="shrink-0 border-b border-nova-border px-3 py-2.5 sm:px-4 md:px-6 md:py-4">
             <div className="flex items-center justify-between gap-3">
               <button
                 type="button"
                 onClick={() => void newFolder()}
                 disabled={busy || loading}
-                className="inline-flex min-h-9 items-center gap-1.5 rounded-xl border border-nova-border px-3 text-xs font-medium text-nova-navy transition-colors hover:border-nova-blue hover:text-nova-blue focus:outline-none focus:ring-2 focus:ring-nova-blue disabled:opacity-50"
+                className="inline-flex min-h-8 items-center gap-1.5 rounded-xl border border-nova-border px-2.5 text-xs font-medium text-nova-navy transition-colors hover:border-nova-blue hover:text-nova-blue focus:outline-none focus:ring-2 focus:ring-nova-blue disabled:opacity-50 md:min-h-9 md:px-3"
               >
                 <FolderPlus className="size-3.5" aria-hidden="true" />
                 New folder
@@ -485,7 +485,7 @@ export default function ChatShell() {
                 {productLabel}
               </span>
             </div>
-            <div className="mt-3 flex items-center gap-3">
+            <div className="mt-2 flex items-center gap-2 md:mt-3 md:gap-3">
               <div
                 className="h-1.5 flex-1 overflow-hidden rounded-full bg-nova-surface-secondary"
                 role="progressbar"
@@ -503,7 +503,7 @@ export default function ChatShell() {
                 {completeness}%
               </span>
             </div>
-            <div className="mt-4 lg:hidden">
+            <div className="mt-2 md:mt-4 lg:hidden">
               <ProgressStepper activeStep={stage} />
             </div>
           </header>

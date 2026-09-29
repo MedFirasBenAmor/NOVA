@@ -31,7 +31,7 @@ export function MessageComposer({
     <form
       onSubmit={onSubmit}
       className={cn(
-        'shrink-0 border-t border-nova-border bg-white/95 px-3 py-3 backdrop-blur sm:px-4',
+        'shrink-0 border-t border-nova-border bg-white/95 px-3 py-2 backdrop-blur sm:px-4 md:py-3',
         className,
       )}
     >
@@ -79,7 +79,10 @@ export function MessageComposer({
       </div>
       <p className="mt-2 flex items-center justify-center gap-1.5 text-[11px] text-nova-muted">
         <ShieldCheck className="size-3.5" aria-hidden="true" />
-        Vous gardez le contrôle de ce que vous partagez.
+        <span className="hidden min-[380px]:inline">
+          Vous gardez le contrôle de ce que vous partagez.
+        </span>
+        <span className="min-[380px]:hidden">Vos données restent sous votre contrôle.</span>
         {count > 0 && (
           <span aria-live="polite" className="tabular-nums">
             {count}/{maxLength}
