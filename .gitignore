@@ -12,3 +12,5 @@ var/documents/
 apps/api/var/documents/
 artifacts/ocr/
 tools/paddle-ocr/.venv/
+.vercel
+.env*
